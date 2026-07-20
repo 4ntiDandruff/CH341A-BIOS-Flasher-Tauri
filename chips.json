@@ -1,0 +1,206 @@
+{
+  "W25Q64BV/W25Q64CV/W25Q64FV": {
+    "manufacturer": "Winbond",
+    "size_kb": 8192,
+    "voltage": "3.3V",
+    "package": "SOP8/DIP8"
+  },
+  "W25Q128BV/W25Q128FV": {
+    "manufacturer": "Winbond",
+    "size_kb": 16384,
+    "voltage": "3.3V",
+    "package": "SOP8/SOP16"
+  },
+  "W25Q256FV/W25Q256JV": {
+    "manufacturer": "Winbond",
+    "size_kb": 32768,
+    "voltage": "3.3V",
+    "package": "SOP8/SOP16"
+  },
+  "W25Q32BV/W25Q32FV": {
+    "manufacturer": "Winbond",
+    "size_kb": 4096,
+    "voltage": "3.3V",
+    "package": "SOP8/DIP8"
+  },
+  "W25Q16JV": {
+    "manufacturer": "Winbond",
+    "size_kb": 2048,
+    "voltage": "3.3V",
+    "package": "SOP8"
+  },
+  "MX25L6406E/MX25L6408E": {
+    "manufacturer": "Macronix",
+    "size_kb": 8192,
+    "voltage": "3.3V",
+    "package": "SOP8"
+  },
+  "MX25L12835F/MX25L12845E": {
+    "manufacturer": "Macronix",
+    "size_kb": 16384,
+    "voltage": "3.3V",
+    "package": "SOP8/SOP16"
+  },
+  "MX25L3206E": {
+    "manufacturer": "Macronix",
+    "size_kb": 4096,
+    "voltage": "3.3V",
+    "package": "SOP8"
+  },
+  "MX25L25635F": {
+    "manufacturer": "Macronix",
+    "size_kb": 32768,
+    "voltage": "3.3V",
+    "package": "SOP16"
+  },
+  "GD25Q64B": {
+    "manufacturer": "GigaDevice",
+    "size_kb": 8192,
+    "voltage": "3.3V",
+    "package": "SOP8"
+  },
+  "GD25Q128C": {
+    "manufacturer": "GigaDevice",
+    "size_kb": 16384,
+    "voltage": "3.3V",
+    "package": "SOP8/SOP16"
+  },
+  "GD25Q32B": {
+    "manufacturer": "GigaDevice",
+    "size_kb": 4096,
+    "voltage": "3.3V",
+    "package": "SOP8"
+  },
+  "GD25Q256D": {
+    "manufacturer": "GigaDevice",
+    "size_kb": 32768,
+    "voltage": "3.3V",
+    "package": "SOP16"
+  },
+  "EN25QH64": {
+    "manufacturer": "EON",
+    "size_kb": 8192,
+    "voltage": "3.3V",
+    "package": "SOP8"
+  },
+  "EN25QH128": {
+    "manufacturer": "EON",
+    "size_kb": 16384,
+    "voltage": "3.3V",
+    "package": "SOP8"
+  },
+  "EN25QH32B": {
+    "manufacturer": "EON",
+    "size_kb": 4096,
+    "voltage": "3.3V",
+    "package": "SOP8"
+  },
+  "A25L080": {
+    "manufacturer": "AMIC",
+    "size_kb": 1024,
+    "voltage": "3.3V",
+    "package": "SOP8"
+  },
+  "SST25VF016B": {
+    "manufacturer": "SST",
+    "size_kb": 2048,
+    "voltage": "3.3V",
+    "package": "SOP8"
+  },
+  "SST25VF032B": {
+    "manufacturer": "SST",
+    "size_kb": 4096,
+    "voltage": "3.3V",
+    "package": "SOP8"
+  },
+  "S25FL064A": {
+    "manufacturer": "Spansion",
+    "size_kb": 8192,
+    "voltage": "3.3V",
+    "package": "SOP8/SOP16"
+  },
+  "S25FL128S": {
+    "manufacturer": "Spansion",
+    "size_kb": 16384,
+    "voltage": "3.3V",
+    "package": "SOP16"
+  },
+  "IS25LP064": {
+    "manufacturer": "ISSI",
+    "size_kb": 8192,
+    "voltage": "3.3V",
+    "package": "SOP8"
+  },
+  "IS25LP128": {
+    "manufacturer": "ISSI",
+    "size_kb": 16384,
+    "voltage": "3.3V",
+    "package": "SOP16"
+  },
+  "AT25SF321": {
+    "manufacturer": "Adesto/Dialog",
+    "size_kb": 4096,
+    "voltage": "3.3V",
+    "package": "SOP8"
+  },
+  "N25Q064A": {
+    "manufacturer": "Micron",
+    "size_kb": 8192,
+    "voltage": "3.3V",
+    "package": "SOP8/SOP16"
+  },
+  "N25Q128A": {
+    "manufacturer": "Micron",
+    "size_kb": 16384,
+    "voltage": "3.3V",
+    "package": "SOP16"
+  },
+  "XM25QH64A": {
+    "manufacturer": "XMC",
+    "size_kb": 8192,
+    "voltage": "3.3V",
+    "package": "SOP8"
+  },
+  "XM25QH128A": {
+    "manufacturer": "XMC",
+    "size_kb": 16384,
+    "voltage": "3.3V",
+    "package": "SOP8"
+  },
+  "PM25LQ032C": {
+    "manufacturer": "PMC",
+    "size_kb": 4096,
+    "voltage": "3.3V",
+    "package": "SOP8"
+  },
+  "W25Q64JV": {
+    "manufacturer": "Winbond",
+    "size_kb": 8192,
+    "voltage": "1.8V",
+    "package": "SOP8"
+  },
+  "W25Q128JV-IM": {
+    "manufacturer": "Winbond",
+    "size_kb": 16384,
+    "voltage": "1.8V",
+    "package": "SOP8/SOP16"
+  },
+  "GD25LQ64C": {
+    "manufacturer": "GigaDevice",
+    "size_kb": 8192,
+    "voltage": "1.8V",
+    "package": "SOP8"
+  },
+  "MX25U6435F": {
+    "manufacturer": "Macronix",
+    "size_kb": 8192,
+    "voltage": "1.8V",
+    "package": "SOP8"
+  },
+  "MX25U12835F": {
+    "manufacturer": "Macronix",
+    "size_kb": 16384,
+    "voltage": "1.8V",
+    "package": "SOP8"
+  }
+}

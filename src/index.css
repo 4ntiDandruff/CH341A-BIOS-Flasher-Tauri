@@ -1,0 +1,39 @@
+@import "tailwindcss";
+@plugin "daisyui" {
+  themes: dark;
+}
+
+.hex-viewer {
+  font-family: "JetBrains Mono", "Fira Code", "Cascadia Code", "Consolas", monospace;
+  font-size: 13px;
+  line-height: 1.4;
+  background: #0d1117;
+  color: #c9d1d9;
+  tab-size: 4;
+  white-space: pre;
+  overflow: auto;
+}
+
+.hex-viewer .offset {
+  color: #7ee787;
+}
+
+.hex-viewer .ascii {
+  color: #d2a8ff;
+}
+
+/* Custom scrollbar for dark theme */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #1d232a;
+}
+::-webkit-scrollbar-thumb {
+  background: #3d4451;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #535d6c;
+}

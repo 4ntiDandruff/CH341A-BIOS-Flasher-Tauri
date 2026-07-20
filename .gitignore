@@ -1,0 +1,29 @@
+# Node.js dependencies
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# Rust/Tauri build artifacts
+src-tauri/target/
+Cargo.lock
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# IDE/Editor files
+.vscode/
+.idea/
+.DS_Store
+*.swp
+*.swo
+
+# Temporary files
+*.bin
+*.rom
+!chips.json
+!PLAN.md
+!README.md
+!CHANGELOG.md
