@@ -17,8 +17,6 @@ struct LogPayload {
     message: String,
 }
 
-
-
 fn emit_log(window: &tauri::Window, msg: &str) {
     let _ = window.emit(
         "operation-log",
@@ -39,8 +37,6 @@ fn emit_progress(window: &tauri::Window, percent: f64, stage: &str) {
 }
 
 fn parse_progress(line: &str) -> Option<f64> {
-    // flashrom outputs lines like "Reading flash... 50% complete."
-    // or "Verifying flash... 100% complete."
     let re = Regex::new(r"(\d+)%").ok()?;
     let caps = re.captures(line)?;
     caps.get(1)?.as_str().parse::<f64>().ok()
@@ -110,14 +106,12 @@ fn run_flashrom_with_progress(
             combined
         );
         emit_log(window, &msg);
-        // Don't treat non-zero exit as hard error for detect — flashrom exits 1 when it finds chips
         Err(msg)
     }
 }
 
 #[tauri::command]
 fn check_usb() -> bool {
-    // Check if CH341A (1a86:5512) is connected via lsusb
     if let Ok(output) = Command::new("lsusb").output() {
         let out = String::from_utf8_lossy(&output.stdout);
         return out.contains("1a86:5512");
@@ -138,8 +132,6 @@ fn detect_chip() -> Result<serde_json::Value, String> {
     let stderr = String::from_utf8_lossy(&output.stderr).to_string();
     let combined = format!("{}\n{}", stdout, stderr);
 
-    // Parse chip name from flashrom output
-    // Patterns: "Found ... chip \"CHIPNAME\"" or "chip "CHIPNAME" ... detected"
     let re_found = Regex::new(r#"Found\s+.*?chip\s+"([^"]+)""#).unwrap();
     let re_multiple = Regex::new(r#"Multiple flash chip definitions match.*:\s*"([^"]+)""#).unwrap();
 
@@ -154,7 +146,6 @@ fn detect_chip() -> Result<serde_json::Value, String> {
         }
     }
 
-    // Also try to find chips listed in "Multiple flash chip definitions" lines
     if chips.is_empty() {
         for cap in re_multiple.captures_iter(&combined) {
             if let Some(name) = cap.get(1) {
@@ -163,7 +154,6 @@ fn detect_chip() -> Result<serde_json::Value, String> {
         }
     }
 
-    // Try another pattern: lines with chip names in quotes
     if chips.is_empty() {
         let re_quotes = Regex::new(r#""([A-Z][A-Za-z0-9_]+\d+[A-Za-z0-9_]*)""#).unwrap();
         for cap in re_quotes.captures_iter(&combined) {
@@ -227,18 +217,17 @@ fn open_backup(path: String) -> Result<Vec<u8>, String> {
 #[tauri::command]
 fn extract_dmi_and_key(data: Vec<u8>) -> serde_json::Value {
     let mut win_key = "Not Found".to_string();
-    
-    // 1. Extract Windows Key from MSDM table
-    // MSDM table signature is "MSDM" (0x4D, 0x53, 0x44, 0x4D)
-    // Followed by table headers and the product key at the end (29 bytes or 25 chars)
+    let mut brand = "Unknown".to_string();
+    let mut model = "Unknown".to_string();
+    let mut serial_num = "Not Found".to_string();
+    let mut board_id = "Not Found".to_string();
+    let mut service_tag = "Not Found".to_string();
+
+    // 1. Extract Windows Key from MSDM
     if let Some(pos) = data.windows(4).position(|w| w == b"MSDM") {
-        // Table is typically small. Key is a 29-byte alfanumeric string (like XXXXX-XXXXX-XXXXX-XXXXX-XXXXX)
-        // Let's search inside a window of 100 bytes from MSDM signature
-        let start_search = pos;
-        let end_search = std::cmp::min(data.len(), pos + 120);
-        let segment = &data[start_search..end_search];
-        
-        // Find Windows Key pattern using Regex in segment
+        let start = pos;
+        let end = std::cmp::min(data.len(), pos + 120);
+        let segment = &data[start..end];
         if let Ok(text) = String::from_utf8(segment.to_vec()) {
             let re_key = Regex::new(r"[A-Z0-9]{5}-[A-Z0-9]{5}-[A-Z0-9]{5}-[A-Z0-9]{5}-[A-Z0-9]{5}").unwrap();
             if let Some(mat) = re_key.find(&text) {
@@ -247,29 +236,106 @@ fn extract_dmi_and_key(data: Vec<u8>) -> serde_json::Value {
         }
     }
 
-    // 2. Extract Serial Number & Board ID (DMI)
-    let mut serial_num = "Not Found".to_string();
-    let mut board_id = "Not Found".to_string();
-
-    // Check ASCII strings in the bios
-    if let Ok(text) = String::from_utf8(data.iter().map(|&b| if b.is_ascii() && b >= 0x20 && b <= 0x7E { b } else { b' ' }).collect()) {
-        // Scan for HP Board ID (BID)
-        let re_bid = Regex::new(r"(?i)BID\s*=\s*([A-Za-z0-9_#]+)").unwrap();
-        if let Some(cap) = re_bid.captures(&text) {
-            board_id = cap.get(1).map(|m| m.as_str().to_string()).unwrap_or_default();
+    // Convert printable ASCII chars, ignoring wide spaces/nulls
+    let mut ascii_chars = Vec::new();
+    for &b in &data {
+        if b.is_ascii() && b >= 0x20 && b <= 0x7E {
+            ascii_chars.push(b as char);
+        } else if b == 0x00 || b == 0x0A || b == 0x0D {
+            if ascii_chars.last() != Some(&' ') {
+                ascii_chars.push(' ');
+            }
         }
+    }
+    
+    let raw_text: String = ascii_chars.into_iter().collect();
+    
+    // Compress multiple spaces into one single space
+    let re_spaces = Regex::new(r"\s+").unwrap();
+    let clean_text = re_spaces.replace_all(&raw_text, " ");
+    let upper_text = clean_text.to_uppercase();
 
-        // Scan for standard Serial Number / S/N patterns
-        let re_sn = Regex::new(r"(?i)(?:serial\s*number|s/n|system\s*serial)\s*:?\s*([A-Z0-9]{8,20})").unwrap();
-        if let Some(cap) = re_sn.captures(&text) {
-            serial_num = cap.get(1).map(|m| m.as_str().to_string()).unwrap_or_default();
+    // 2. Identify Brand
+    if upper_text.contains("LENOVO") {
+        brand = "Lenovo".to_string();
+    } else if upper_text.contains("ASUSTEK") || upper_text.contains("ASUS") {
+        brand = "ASUS".to_string();
+    } else if upper_text.contains("HEWLETT-PACKARD") || upper_text.contains("HP ") || upper_text.contains("HP.") {
+        brand = "HP".to_string();
+    } else if upper_text.contains("DELL") {
+        brand = "Dell".to_string();
+    } else if upper_text.contains("ACER") {
+        brand = "Acer".to_string();
+    } else if upper_text.contains("TOSHIBA") {
+        brand = "Toshiba".to_string();
+    } else if upper_text.contains("GIGABYTE") {
+        brand = "Gigabyte".to_string();
+    } else if upper_text.contains("MSI") {
+        brand = "MSI".to_string();
+    }
+
+    // 3. Extract Board ID / BID (HP)
+    let re_bid = Regex::new(r"(?i)BID([0-9A-F]{4,6})").unwrap();
+    if let Some(cap) = re_bid.captures(&clean_text) {
+        board_id = cap.get(1).map(|m| m.as_str().to_string()).unwrap_or_default();
+    }
+
+    // 4. Extract Dell Service Tag (exactly 7 alphanumeric chars, validated with DELL signature)
+    if brand == "Dell" {
+        let re_svctag = Regex::new(r"\b([A-Z0-9]{7})\b").unwrap();
+        for cap in re_svctag.captures_iter(&clean_text) {
+            let tag = cap.get(1).unwrap().as_str().to_string();
+            if !tag.contains("SERVICE") && !tag.contains("VERSION") {
+                service_tag = tag;
+                break;
+            }
+        }
+    }
+
+    // 5. Extract Serial Number
+    let re_sn = Regex::new(r"(?i)(?:serial\s*number|s/n|system\s*serial|serial\s*no|prodn)\s*[:=]?\s*([A-Z0-9]{8,20})").unwrap();
+    if let Some(cap) = re_sn.captures(&clean_text) {
+        serial_num = cap.get(1).map(|m| m.as_str().to_string()).unwrap_or_default();
+    }
+
+    // HP Specific Serial Number Fallback
+    if serial_num == "Not Found" && brand == "HP" {
+        let re_hp_sn = Regex::new(r"\b(5CG|5CD|CND|CNU|5CB)[A-Z0-9]{7}\b").unwrap();
+        if let Some(cap) = re_hp_sn.find(&clean_text) {
+            serial_num = cap.as_str().to_string();
+        }
+    }
+
+    // 6. Extract Model Name based on Brand
+    if brand == "Lenovo" {
+        let re_lenovo = Regex::new(r"(?i)(ThinkPad|IdeaPad|Yoga)\s+[A-Z0-9]{2,10}(?:\s+[A-Z0-9]{2,10})?").unwrap();
+        if let Some(cap) = re_lenovo.find(&clean_text) {
+            model = cap.as_str().trim().to_string();
+        }
+    } else if brand == "ASUS" {
+        let re_asus = Regex::new(r"\b(X\d{3}[A-Z]{1,2}|UX\d{3}[A-Z]{0,2}|A\d{3}[A-Z]{1,2}|K\d{3}[A-Z]{1,2}|GL\d{3}[A-Z]{0,2})\b").unwrap();
+        if let Some(cap) = re_asus.find(&clean_text) {
+            model = cap.as_str().to_string();
+        }
+    } else if brand == "HP" {
+        let re_hp = Regex::new(r"(?i)(?:ProBook|EliteBook|Pavilion|Spectre|Envy|HP\s+Notebook)\s+\d{3,4}(?:\s+G\d)?").unwrap();
+        if let Some(cap) = re_hp.find(&clean_text) {
+            model = cap.as_str().trim().to_string();
+        }
+    } else if brand == "Dell" {
+        let re_dell = Regex::new(r"(?i)(?:Latitude|Inspiron|Vostro|Precision|OptiPlex|XPS)\s+\d{4}").unwrap();
+        if let Some(cap) = re_dell.find(&clean_text) {
+            model = cap.as_str().trim().to_string();
         }
     }
 
     serde_json::json!({
+        "brand": brand,
+        "model": model,
         "windows_key": win_key,
         "serial_number": serial_num,
-        "board_id": board_id
+        "board_id": board_id,
+        "service_tag": service_tag
     })
 }
 
@@ -334,7 +400,6 @@ async fn erase_bios(chip: String, window: tauri::Window) -> Result<String, Strin
 
 #[tauri::command]
 fn load_chip_db(app_handle: tauri::AppHandle) -> Result<String, String> {
-    // Try resource dir first, then fallback path
     if let Ok(resource_path) = app_handle.path().resource_dir() {
         let chips_path = resource_path.join("chips.json");
         if chips_path.exists() {
@@ -348,7 +413,6 @@ fn load_chip_db(app_handle: tauri::AppHandle) -> Result<String, String> {
         return Ok(content);
     }
 
-    // Return empty array if no chip db found
     Ok("[]".to_string())
 }
 
@@ -360,11 +424,9 @@ fn dirs_fallback() -> String {
 #[tauri::command]
 fn get_chip_info(chip: String, app_handle: tauri::AppHandle) -> Result<serde_json::Value, String> {
     let db_json = load_chip_db(app_handle)?;
-    // chips.json is a Map: { "chipName": { manufacturer, size_kb, voltage, package }, ... }
     let chips: serde_json::Map<String, serde_json::Value> =
         serde_json::from_str(&db_json).map_err(|e| format!("Failed to parse chip db: {}", e))?;
 
-    // Try exact match first
     if let Some(info) = chips.get(&chip) {
         return Ok(serde_json::json!({
             "found": true,
@@ -376,7 +438,6 @@ fn get_chip_info(chip: String, app_handle: tauri::AppHandle) -> Result<serde_jso
         }));
     }
 
-    // Try partial match (chip name might be part of a key like "W25Q64BV/W25Q64CV/W25Q64FV")
     for (key, info) in &chips {
         let parts: Vec<&str> = key.split('/').collect();
         for part in &parts {
@@ -419,7 +480,6 @@ pub fn run() {
             write_bios,
             verify_bios,
             erase_bios,
-            load_chip_db,
             get_chip_info,
         ])
         .run(tauri::generate_context!())
