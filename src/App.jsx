@@ -84,10 +84,8 @@ function formatHex(bytes, highlightOffset = -1, searchLen = 0) {
   lines.push("Offset    00 01 02 03 04 05 06 07 08 09 0A 0B 0C 0D 0E 0F  |ASCII|");
   lines.push("─".repeat(79));
 
-  // Determine starting point
   let startOffset = 0;
   if (highlightOffset !== -1) {
-    // Center window on highlighted search match
     startOffset = Math.max(0, Math.floor(highlightOffset / 16) * 16 - 256);
   } else if (!isEmpty && firstDataOffset > 65536) {
     startOffset = Math.floor(firstDataOffset / 16) * 16;
@@ -111,15 +109,12 @@ function formatHex(bytes, highlightOffset = -1, searchLen = 0) {
       if (idx < endOffset) {
         const b = bytes[idx];
         const hexStr = b.toString(16).toUpperCase().padStart(2, "0");
-        
-        // Highlight indicator for search matches inside hex print
         const isMatch = highlightOffset !== -1 && idx >= highlightOffset && idx < (highlightOffset + searchLen);
         if (isMatch) {
           hexParts.push(`>${hexStr}<`);
         } else {
           hexParts.push(` ${hexStr} `);
         }
-        
         ascii += b >= 0x20 && b <= 0x7e ? String.fromCharCode(b) : ".";
       } else {
         hexParts.push("    ");
@@ -155,10 +150,15 @@ export default function App() {
   const [searchResultIdx, setSearchResultIdx] = useState(-1);
   const [searchLen, setSearchLen] = useState(0);
   const [dmiInfo, setDmiInfo] = useState({
+    brand: "Unknown",
+    model: "Unknown",
     windows_key: "Not Found",
     serial_number: "Not Found",
-    board_id: "Not Found"
+    board_id: "Not Found",
+    service_tag: "Not Found"
   });
+  
+  const [copiedField, setCopiedField] = useState("");
 
   const instantStageRef = useRef(null); 
   const logRef = useRef(null);
@@ -205,28 +205,31 @@ export default function App() {
     return () => unsubs.forEach((u) => u());
   }, [appendLog]);
 
-  // Update hex view when buffer or search highlight changes
   useEffect(() => {
     setHexText(buffer ? formatHex(buffer, searchResultIdx, searchLen) : "");
   }, [buffer, searchResultIdx, searchLen]);
 
-  // Auto-scroll log
   useEffect(() => {
     if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
   }, [statusLog]);
 
-  // Local Search Engine for Hex/ASCII
+  const copyToClipboard = (text, fieldName) => {
+    if (text === "Not Found" || text === "Unknown") return;
+    navigator.clipboard.writeText(text).then(() => {
+      setCopiedField(fieldName);
+      appendLog(`📋 Copied ${fieldName}: ${text}`);
+      setTimeout(() => setCopiedField(""), 1500);
+    });
+  };
+
   const handleSearch = () => {
     if (!buffer || buffer.length === 0 || !searchQuery) return;
     
     const query = searchQuery.trim();
     let queryBytes = [];
 
-    // Check if query is Hex input (starts with 0x or consists of hex characters space-separated)
     const isHexPattern = /^(0x)?[0-9a-fA-F\s]+$/.test(query) && query.length >= 2;
-    
     if (isHexPattern) {
-      // Parse Hex search bytes
       const cleanedHex = query.replace(/0x/g, "").replace(/\s+/g, "");
       if (cleanedHex.length % 2 === 0) {
         for (let i = 0; i < cleanedHex.length; i += 2) {
@@ -236,14 +239,12 @@ export default function App() {
     }
     
     if (queryBytes.length === 0) {
-      // Fallback: ASCII Text Search
       const encoder = new TextEncoder();
       queryBytes = Array.from(encoder.encode(query));
     }
 
     setSearchLen(queryBytes.length);
 
-    // Search byte signature inside buffer
     let matchOffset = -1;
     for (let i = 0; i <= buffer.length - queryBytes.length; i++) {
       let match = true;
@@ -268,7 +269,6 @@ export default function App() {
     }
   };
 
-  // Trigger DMI extraction on buffer load
   const triggerDmiExtraction = async (bytes) => {
     try {
       const info = await invoke("extract_dmi_and_key", { data: Array.from(bytes) });
@@ -276,8 +276,8 @@ export default function App() {
       if (info.windows_key !== "Not Found") {
         appendLog(`🔑 Windows Product Key Extracted: ${info.windows_key}`);
       }
-      if (info.serial_number !== "Not Found" || info.board_id !== "Not Found") {
-        appendLog(`📋 System info: S/N: ${info.serial_number} | BID: ${info.board_id}`);
+      if (info.brand !== "Unknown") {
+        appendLog(`📋 Identified Device: ${info.brand} ${info.model}`);
       }
     } catch (e) {
       console.error("DMI Extraction failed:", e);
@@ -554,21 +554,91 @@ export default function App() {
               ))}
             </ul>
 
-            {/* DMI & License Panel (Opsi B) */}
+            {/* Smart Card DMI & Info (Opsi 1 + Clipboard copy) */}
             <div className="mx-4 my-2 p-3 bg-base-300/60 border border-base-content/10 rounded-lg text-xs space-y-2">
-              <div className="font-semibold opacity-60 uppercase tracking-wider text-[10px]">📟 BIOS DMI & License Info</div>
+              <div className="font-semibold opacity-60 uppercase tracking-wider text-[10px] flex justify-between items-center">
+                <span>📟 Detected Device Identity</span>
+                {dmiInfo.brand !== "Unknown" && (
+                  <span className="badge badge-accent badge-outline text-[9px] scale-95 font-bold uppercase">{dmiInfo.brand}</span>
+                )}
+              </div>
+
+              {/* Dynamic Brand & Model */}
               <div className="flex justify-between border-b border-base-content/5 py-1">
+                <span className="opacity-70">💻 Device Model:</span>
+                <span className="font-bold text-base-content select-text">
+                  {dmiInfo.brand !== "Unknown" ? `${dmiInfo.brand} ${dmiInfo.model}` : "Unknown"}
+                </span>
+              </div>
+
+              {/* Windows Key (Always shown) */}
+              <div className="flex justify-between items-center border-b border-base-content/5 py-1">
                 <span className="opacity-70">🔑 Windows Key:</span>
-                <span className="font-mono font-bold text-primary select-text">{dmiInfo.windows_key}</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="font-mono font-bold text-primary select-text">{dmiInfo.windows_key}</span>
+                  {dmiInfo.windows_key !== "Not Found" && (
+                    <button 
+                      className={`btn btn-xs btn-ghost p-1 ${copiedField === "winKey" ? "text-success" : "opacity-50 hover:opacity-100"}`} 
+                      onClick={() => copyToClipboard(dmiInfo.windows_key, "winKey")}
+                      title="Copy to clipboard"
+                    >
+                      {copiedField === "winKey" ? "✓" : "📋"}
+                    </button>
+                  )}
+                </div>
               </div>
-              <div className="flex justify-between border-b border-base-content/5 py-1">
+
+              {/* Serial Number (Always shown) */}
+              <div className="flex justify-between items-center border-b border-base-content/5 py-1">
                 <span className="opacity-70">📋 Serial Number:</span>
-                <span className="font-mono font-bold select-text">{dmiInfo.serial_number}</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="font-mono font-semibold select-text">{dmiInfo.serial_number}</span>
+                  {dmiInfo.serial_number !== "Not Found" && (
+                    <button 
+                      className={`btn btn-xs btn-ghost p-1 ${copiedField === "sn" ? "text-success" : "opacity-50 hover:opacity-100"}`} 
+                      onClick={() => copyToClipboard(dmiInfo.serial_number, "sn")}
+                      title="Copy to clipboard"
+                    >
+                      {copiedField === "sn" ? "✓" : "📋"}
+                    </button>
+                  )}
+                </div>
               </div>
-              <div className="flex justify-between py-1">
-                <span className="opacity-70">⚙️ Board ID (BID):</span>
-                <span className="font-mono font-bold select-text">{dmiInfo.board_id}</span>
-              </div>
+
+              {/* HP Specific: Board ID */}
+              {dmiInfo.brand === "HP" && dmiInfo.board_id !== "Not Found" && (
+                <div className="flex justify-between items-center border-b border-base-content/5 py-1">
+                  <span className="opacity-70 text-warning font-semibold">⚙️ Board ID (BID):</span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-mono font-bold text-warning select-text">{dmiInfo.board_id}</span>
+                    <button 
+                      className={`btn btn-xs btn-ghost p-1 ${copiedField === "bid" ? "text-success" : "opacity-50 hover:opacity-100"}`} 
+                      onClick={() => copyToClipboard(dmiInfo.board_id, "bid")}
+                      title="Copy to clipboard"
+                    >
+                      {copiedField === "bid" ? "✓" : "📋"}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Dell Specific: Service Tag */}
+              {dmiInfo.brand === "Dell" && dmiInfo.service_tag !== "Not Found" && (
+                <div className="flex justify-between items-center border-b border-base-content/5 py-1">
+                  <span className="opacity-70 text-info font-semibold">🏷️ Dell Service Tag:</span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-mono font-bold text-info select-text">{dmiInfo.service_tag}</span>
+                    <button 
+                      className={`btn btn-xs btn-ghost p-1 ${copiedField === "svctag" ? "text-success" : "opacity-50 hover:opacity-100"}`} 
+                      onClick={() => copyToClipboard(dmiInfo.service_tag, "svctag")}
+                      title="Copy to clipboard"
+                    >
+                      {copiedField === "svctag" ? "✓" : "📋"}
+                    </button>
+                  </div>
+                </div>
+              )}
+
             </div>
           </div>
 
