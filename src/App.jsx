@@ -24,36 +24,40 @@ function playSound(type) {
   try {
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
     if (type === 'success') {
-      // 1x Single Warm Musical Chime (Sine wave at 587.33Hz - D5, soft volume)
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(587.33, ctx.currentTime); 
-      gain.gain.setValueAtTime(0.08, ctx.currentTime); 
-      osc.start();
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
-      osc.stop(ctx.currentTime + 0.4);
+      const playBeep = (delay) => {
+        setTimeout(() => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(2500, ctx.currentTime);
+          gain.gain.setValueAtTime(0.3, ctx.currentTime);
+          osc.start();
+          gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.15);
+          osc.stop(ctx.currentTime + 0.18);
+        }, delay);
+      };
+      playBeep(0);
+      playBeep(250);
     } else {
-      // 1x Single Soft Alert Bass (Triangle wave at 180Hz - F3, warm & tumpul)
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
       osc.connect(gain);
       gain.connect(ctx.destination);
-      osc.type = 'triangle';
-      osc.frequency.setValueAtTime(180, ctx.currentTime);
-      gain.gain.setValueAtTime(0.12, ctx.currentTime);
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(130, ctx.currentTime);
+      gain.gain.setValueAtTime(0.4, ctx.currentTime);
       osc.start();
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.45);
-      osc.stop(ctx.currentTime + 0.5);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.55);
+      osc.stop(ctx.currentTime + 0.6);
     }
   } catch (e) {
     console.error("Audio notification error:", e);
   }
 }
 
-function formatHex(bytes) {
+function formatHex(bytes, highlightOffset = -1, searchLen = 0) {
   if (!bytes || bytes.length === 0) return "No data loaded";
   const totalSize = bytes.length;
   const totalKB = (totalSize / 1024).toFixed(0);
@@ -80,9 +84,16 @@ function formatHex(bytes) {
   lines.push("Offset    00 01 02 03 04 05 06 07 08 09 0A 0B 0C 0D 0E 0F  |ASCII|");
   lines.push("─".repeat(79));
 
+  // Determine starting point
   let startOffset = 0;
-  if (!isEmpty && firstDataOffset > 65536) {
+  if (highlightOffset !== -1) {
+    // Center window on highlighted search match
+    startOffset = Math.max(0, Math.floor(highlightOffset / 16) * 16 - 256);
+  } else if (!isEmpty && firstDataOffset > 65536) {
     startOffset = Math.floor(firstDataOffset / 16) * 16;
+  }
+  
+  if (startOffset > 0) {
     lines.push(`... skipping ${(startOffset/1024).toFixed(0)}KB of 0xFF ...`);
     lines.push("");
   }
@@ -94,17 +105,28 @@ function formatHex(bytes) {
     const offset = i.toString(16).toUpperCase().padStart(8, "0");
     const hexParts = [];
     let ascii = "";
+    
     for (let j = 0; j < 16; j++) {
-      if (i + j < endOffset) {
-        const b = bytes[i + j];
-        hexParts.push(b.toString(16).toUpperCase().padStart(2, "0"));
+      const idx = i + j;
+      if (idx < endOffset) {
+        const b = bytes[idx];
+        const hexStr = b.toString(16).toUpperCase().padStart(2, "0");
+        
+        // Highlight indicator for search matches inside hex print
+        const isMatch = highlightOffset !== -1 && idx >= highlightOffset && idx < (highlightOffset + searchLen);
+        if (isMatch) {
+          hexParts.push(`>${hexStr}<`);
+        } else {
+          hexParts.push(` ${hexStr} `);
+        }
+        
         ascii += b >= 0x20 && b <= 0x7e ? String.fromCharCode(b) : ".";
       } else {
-        hexParts.push("  ");
+        hexParts.push("    ");
         ascii += " ";
       }
     }
-    lines.push(`${offset}  ${hexParts.join(" ")}  |${ascii}|`);
+    lines.push(`${offset}  ${hexParts.join("")} |${ascii}|`);
   }
 
   if (endOffset < totalSize) {
@@ -128,6 +150,16 @@ export default function App() {
   const [instantMode, setInstantMode] = useState(false);
   const [showAbout, setShowAbout] = useState(false);
   
+  // DMI & Search states
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResultIdx, setSearchResultIdx] = useState(-1);
+  const [searchLen, setSearchLen] = useState(0);
+  const [dmiInfo, setDmiInfo] = useState({
+    windows_key: "Not Found",
+    serial_number: "Not Found",
+    board_id: "Not Found"
+  });
+
   const instantStageRef = useRef(null); 
   const logRef = useRef(null);
 
@@ -173,13 +205,84 @@ export default function App() {
     return () => unsubs.forEach((u) => u());
   }, [appendLog]);
 
+  // Update hex view when buffer or search highlight changes
   useEffect(() => {
-    setHexText(buffer ? formatHex(buffer) : "");
-  }, [buffer]);
+    setHexText(buffer ? formatHex(buffer, searchResultIdx, searchLen) : "");
+  }, [buffer, searchResultIdx, searchLen]);
 
+  // Auto-scroll log
   useEffect(() => {
     if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
   }, [statusLog]);
+
+  // Local Search Engine for Hex/ASCII
+  const handleSearch = () => {
+    if (!buffer || buffer.length === 0 || !searchQuery) return;
+    
+    const query = searchQuery.trim();
+    let queryBytes = [];
+
+    // Check if query is Hex input (starts with 0x or consists of hex characters space-separated)
+    const isHexPattern = /^(0x)?[0-9a-fA-F\s]+$/.test(query) && query.length >= 2;
+    
+    if (isHexPattern) {
+      // Parse Hex search bytes
+      const cleanedHex = query.replace(/0x/g, "").replace(/\s+/g, "");
+      if (cleanedHex.length % 2 === 0) {
+        for (let i = 0; i < cleanedHex.length; i += 2) {
+          queryBytes.push(parseInt(cleanedHex.substr(i, 2), 16));
+        }
+      }
+    }
+    
+    if (queryBytes.length === 0) {
+      // Fallback: ASCII Text Search
+      const encoder = new TextEncoder();
+      queryBytes = Array.from(encoder.encode(query));
+    }
+
+    setSearchLen(queryBytes.length);
+
+    // Search byte signature inside buffer
+    let matchOffset = -1;
+    for (let i = 0; i <= buffer.length - queryBytes.length; i++) {
+      let match = true;
+      for (let j = 0; j < queryBytes.length; j++) {
+        if (buffer[i + j] !== queryBytes[j]) {
+          match = false;
+          break;
+        }
+      }
+      if (match) {
+        matchOffset = i;
+        break;
+      }
+    }
+
+    if (matchOffset !== -1) {
+      setSearchResultIdx(matchOffset);
+      appendLog(`🔍 Match found at offset 0x${matchOffset.toString(16).toUpperCase()}`);
+    } else {
+      setSearchResultIdx(-1);
+      appendLog(`⚠️ Query "${query}" not found in buffer.`);
+    }
+  };
+
+  // Trigger DMI extraction on buffer load
+  const triggerDmiExtraction = async (bytes) => {
+    try {
+      const info = await invoke("extract_dmi_and_key", { data: Array.from(bytes) });
+      setDmiInfo(info);
+      if (info.windows_key !== "Not Found") {
+        appendLog(`🔑 Windows Product Key Extracted: ${info.windows_key}`);
+      }
+      if (info.serial_number !== "Not Found" || info.board_id !== "Not Found") {
+        appendLog(`📋 System info: S/N: ${info.serial_number} | BID: ${info.board_id}`);
+      }
+    } catch (e) {
+      console.error("DMI Extraction failed:", e);
+    }
+  };
 
   async function handleMenuClick(menuId) {
     if (isProcessing) return;
@@ -264,6 +367,7 @@ export default function App() {
     const data = await invoke("read_bios", { chip });
     const bytes = new Uint8Array(data);
     setBuffer(bytes);
+    setSearchResultIdx(-1);
     const duration = formatDuration(performance.now() - start);
     let nonFF = 0;
     for (let i = 0; i < bytes.length; i++) { if (bytes[i] !== 0xFF) nonFF++; }
@@ -271,6 +375,7 @@ export default function App() {
     appendLog(`✅ Read completed in ${duration} | ${(bytes.length / 1024).toFixed(0)}KB | ${pctUsed}% used (${nonFF.toLocaleString()} non-FF bytes)`);
     setProgress(100);
     playSound('success');
+    await triggerDmiExtraction(bytes);
   }
 
   async function handleBackup() {
@@ -301,12 +406,14 @@ export default function App() {
     const bytes = new Uint8Array(data);
     setBuffer(bytes);
     setFileName(path);
+    setSearchResultIdx(-1);
     let nonFF = 0;
     for (let i = 0; i < bytes.length; i++) { if (bytes[i] !== 0xFF) nonFF++; }
     const pctUsed = ((nonFF / bytes.length) * 100).toFixed(1);
     appendLog(`✅ Loaded ${(bytes.length / 1024).toFixed(0)}KB | ${pctUsed}% used | from ${path.split(/[/\\]/).pop()}`);
     setProgress(100);
     playSound('success');
+    await triggerDmiExtraction(bytes);
   }
 
   async function handleWrite() {
@@ -446,6 +553,23 @@ export default function App() {
                 </li>
               ))}
             </ul>
+
+            {/* DMI & License Panel (Opsi B) */}
+            <div className="mx-4 my-2 p-3 bg-base-300/60 border border-base-content/10 rounded-lg text-xs space-y-2">
+              <div className="font-semibold opacity-60 uppercase tracking-wider text-[10px]">📟 BIOS DMI & License Info</div>
+              <div className="flex justify-between border-b border-base-content/5 py-1">
+                <span className="opacity-70">🔑 Windows Key:</span>
+                <span className="font-mono font-bold text-primary select-text">{dmiInfo.windows_key}</span>
+              </div>
+              <div className="flex justify-between border-b border-base-content/5 py-1">
+                <span className="opacity-70">📋 Serial Number:</span>
+                <span className="font-mono font-bold select-text">{dmiInfo.serial_number}</span>
+              </div>
+              <div className="flex justify-between py-1">
+                <span className="opacity-70">⚙️ Board ID (BID):</span>
+                <span className="font-mono font-bold select-text">{dmiInfo.board_id}</span>
+              </div>
+            </div>
           </div>
 
           <div className="flex flex-col">
@@ -490,6 +614,29 @@ export default function App() {
 
         {/* Right pane */}
         <div className="w-3/5 flex flex-col overflow-hidden">
+          {/* Opsi B Search Panel */}
+          <div className="p-2 bg-base-300/80 border-b border-base-content/10 flex items-center gap-2">
+            <input
+              type="text"
+              placeholder="Search Text or Hex (e.g. AMIBIOS or 0x4D53444D)..."
+              className="input input-bordered input-sm flex-1 font-mono text-xs focus:input-primary"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+            />
+            <button className="btn btn-primary btn-sm px-4" onClick={handleSearch}>
+              🔍 Find
+            </button>
+            {searchResultIdx !== -1 && (
+              <button 
+                className="btn btn-ghost btn-sm text-[10px] opacity-50 px-1"
+                onClick={() => setSearchResultIdx(-1)}
+              >
+                ✕ clear
+              </button>
+            )}
+          </div>
+
           <div className="flex-1 overflow-auto p-2">
             <pre className="hex-viewer w-full h-full p-3 rounded-lg overflow-auto font-mono text-xs select-text">
               {hexText || "No data loaded.\n\nDetect a chip and Read, or Open a backup file."}

@@ -225,6 +225,55 @@ fn open_backup(path: String) -> Result<Vec<u8>, String> {
 }
 
 #[tauri::command]
+fn extract_dmi_and_key(data: Vec<u8>) -> serde_json::Value {
+    let mut win_key = "Not Found".to_string();
+    
+    // 1. Extract Windows Key from MSDM table
+    // MSDM table signature is "MSDM" (0x4D, 0x53, 0x44, 0x4D)
+    // Followed by table headers and the product key at the end (29 bytes or 25 chars)
+    if let Some(pos) = data.windows(4).position(|w| w == b"MSDM") {
+        // Table is typically small. Key is a 29-byte alfanumeric string (like XXXXX-XXXXX-XXXXX-XXXXX-XXXXX)
+        // Let's search inside a window of 100 bytes from MSDM signature
+        let start_search = pos;
+        let end_search = std::cmp::min(data.len(), pos + 120);
+        let segment = &data[start_search..end_search];
+        
+        // Find Windows Key pattern using Regex in segment
+        if let Ok(text) = String::from_utf8(segment.to_vec()) {
+            let re_key = Regex::new(r"[A-Z0-9]{5}-[A-Z0-9]{5}-[A-Z0-9]{5}-[A-Z0-9]{5}-[A-Z0-9]{5}").unwrap();
+            if let Some(mat) = re_key.find(&text) {
+                win_key = mat.as_str().to_string();
+            }
+        }
+    }
+
+    // 2. Extract Serial Number & Board ID (DMI)
+    let mut serial_num = "Not Found".to_string();
+    let mut board_id = "Not Found".to_string();
+
+    // Check ASCII strings in the bios
+    if let Ok(text) = String::from_utf8(data.iter().map(|&b| if b.is_ascii() && b >= 0x20 && b <= 0x7E { b } else { b' ' }).collect()) {
+        // Scan for HP Board ID (BID)
+        let re_bid = Regex::new(r"(?i)BID\s*=\s*([A-Za-z0-9_#]+)").unwrap();
+        if let Some(cap) = re_bid.captures(&text) {
+            board_id = cap.get(1).map(|m| m.as_str().to_string()).unwrap_or_default();
+        }
+
+        // Scan for standard Serial Number / S/N patterns
+        let re_sn = Regex::new(r"(?i)(?:serial\s*number|s/n|system\s*serial)\s*:?\s*([A-Z0-9]{8,20})").unwrap();
+        if let Some(cap) = re_sn.captures(&text) {
+            serial_num = cap.get(1).map(|m| m.as_str().to_string()).unwrap_or_default();
+        }
+    }
+
+    serde_json::json!({
+        "windows_key": win_key,
+        "serial_number": serial_num,
+        "board_id": board_id
+    })
+}
+
+#[tauri::command]
 async fn write_bios(chip: String, data: Vec<u8>, window: tauri::Window) -> Result<String, String> {
     let buffer_path = "/tmp/bios_write_buffer.bin";
     fs::write(buffer_path, &data).map_err(|e| format!("Failed to write buffer: {}", e))?;
@@ -366,6 +415,7 @@ pub fn run() {
             read_bios,
             backup_bios,
             open_backup,
+            extract_dmi_and_key,
             write_bios,
             verify_bios,
             erase_bios,
