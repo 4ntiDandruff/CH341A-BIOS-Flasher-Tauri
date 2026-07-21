@@ -749,8 +749,13 @@ ${diagnosticError.context || "No raw context"}
             <span className="badge badge-error badge-outline text-xs">No chip</span>
           )}
           {chipInfo?.manufacturer && (
-            <span className="badge badge-ghost text-xs">
+            <span className={`badge text-xs font-bold ${chipInfo.voltage === "1.8V" ? "badge-warning animate-bounce" : "badge-ghost"}`}>
               {chipInfo.manufacturer} {chipInfo.size_kb ? `${chipInfo.size_kb/1024}MB` : ""} {chipInfo.voltage || ""}
+            </span>
+          )}
+          {chipInfo?.voltage === "1.8V" && (
+            <span className="badge badge-error font-bold text-xs animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.7)]">
+              ⚠️ WAJIB PAKAI ADAPTER 1.8V!
             </span>
           )}
         </div>
