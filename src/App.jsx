@@ -8,10 +8,10 @@ const MENU_ITEMS = [
   { id: 2, icon: "📖", label: "Read", direct: false },
   { id: 3, icon: "💾", label: "Backup", direct: true },
   { id: 4, icon: "📂", label: "Open Backup", direct: true },
-  { id: 8, icon: "💉", label: "DMI Injector", direct: true },
   { id: 7, icon: "🗑️", label: "Erase", direct: false },
   { id: 5, icon: "✍️", label: "Write", direct: false },
   { id: 6, icon: "✅", label: "Verify", direct: false },
+  { id: 8, icon: "💉", label: "DMI Injector", direct: true },
 ];
 
 function formatDuration(ms) {
@@ -718,16 +718,16 @@ export default function App() {
         {/* Left pane */}
         <div className="w-2/5 flex flex-col bg-base-200 border-r border-base-content/10 justify-between">
           <div className="flex flex-col flex-1 overflow-y-auto pt-2">
-            <ul className="menu px-2">
+            <ul className="menu px-2 space-y-0.5">
               {MENU_ITEMS.map((item) => (
                 <li key={item.id}>
                   <button
-                    className={`flex items-center gap-3 text-base py-3.5 ${
+                    className={`flex items-center gap-2.5 text-sm py-2 ${
                       activeMenu === item.id ? "active bg-primary/20 text-primary font-semibold" : ""
                     } ${isProcessing ? "pointer-events-none opacity-50" : ""}`}
                     onClick={() => handleMenuClick(item.id)}
                   >
-                    <span className="text-xl">{item.icon}</span>
+                    <span className="text-lg">{item.icon}</span>
                     {item.label}
                   </button>
                 </li>
