@@ -12,44 +12,65 @@ Aplikasi GUI modern, super cepat, dan ringan berbasis **Tauri v2 (Rust Backend &
 
 ## 🚀 Fitur Unggulan
 
-### 1. 🔍 Auto-Detect Chip (1-Click)
-Mendeteksi IC EEPROM SPI secara instan. Menampilkan nama chip, pabrikan (Winbond, Macronix, Gigadevice, dll.), kapasitas memori (MB), voltase kerja (1.8V / 3.3V), dan tipe package (SOP8, DIP8, SOP16).
-
-### 2. 📖 Fast Read & Buffer Analytics
-Membaca firmware BIOS ke buffer memori dengan sangat cepat. Dilengkapi indikator persentase memori terpakai (*used data percentage*) agar teknisi langsung tahu apakah IC tersebut kosong (semua 0xFF) atau terisi data.
-
-### 3. 📟 Smart DMI & License Auto-Extractor (Offline)
-Fitur *killer* untuk servis motherboard laptop. Aplikasi akan memindai isi BIOS secara otomatis untuk mengekstrak:
-*   🔑 **Windows Product Key (OEM):** Membaca ACPI MSDM table bawaan pabrik agar lisensi Windows pelanggan tidak hilang.
-*   📋 **Serial Number (S/N):** Menampilkan nomor seri asli unit laptop.
-*   🏷️ **Dell Service Tag:** Mengekstrak 7-digit kode Dell secara otomatis.
-*   ⚙️ **HP Board ID (BID):** Menampilkan kode BID unik HP untuk mencegah salah flash (*no display*).
-*   📋 **1-Click Copy:** Tombol copy clipboard di setiap baris data untuk menyalin data secara instan tanpa ribet.
-
-### 4. ⚡ Instant Mode (Erase → Write → Verify)
-Meningkatkan produktivitas servis dengan otomatisasi 3 langkah penting sekali klik. Sangat efisien untuk pengerjaan antrean servis yang menumpuk.
-
-### 5. 🔍 Hex Viewer dengan Local Search
-Hex Viewer bawaan yang responsif dengan fitur pencarian teks ASCII maupun string Hex (misal mencari string header `AMIBIOS` atau `MSDM`). Viewer secara cerdas akan otomatis melompati deretan kosong `0xFF` langsung menuju baris awal data pertama.
-
-### 6. 🟢 Live USB Pulse Indicator
-Lampu indikator koneksi hardware programmer CH341A secara real-time (Hijau berkedip = Terhubung, Merah berkedip = Terputus/Tidak Terdeteksi).
-
-### 7. 🔔 Chime & Alert Sound
-Menggunakan Web Audio API untuk notifikasi suara yang bersahabat:
-*   🎵 **1x Chime Ringan (Sine Wave):** Notifikasi sukses proses.
-*   🚨 **1x Buzz Berat (Triangle Wave):** Peringatan keras saat terjadi gagal proses/bad connection.
+1.  **🔍 Auto-Detect Chip (1-Click):** Mendeteksi IC EEPROM SPI secara instan beserta informasi voltage (1.8V / 3.3V) dan tipe package.
+2.  **📖 Fast Read & Buffer Analytics:** Membaca firmware BIOS ke buffer memori RAM dengan analisis persentase data terpakai (non-FF bytes).
+3.  **📟 Smart DMI & License Auto-Extractor (Offline):** Ekstraksi Windows Product Key (MSDM), Serial Number (S/N), Dell Service Tag, dan HP Board ID (BID) secara otomatis dilengkapi tombol copy clipboard 📋.
+4.  **⚡ Instant Mode:** Pipeline otomatisasi sekali jalan: Erase → Write → Verify.
+5.  **🔍 Hex Viewer dengan Local Search:** Hex Viewer responsif dengan skip otomatis data kosong `0xFF` dan fitur pencarian string text/hex.
+6.  **🟢 Live USB Pulse Indicator:** Indikator pendeteksi status koneksi hardware programmer CH341A secara real-time.
+7.  **🔊 Chime & Alert Sound:** Web Audio API untuk nada status (Chime sukses, Buzz gagal).
 
 ---
 
-## 🖥️ Kebutuhan Sistem
+## 📦 Dokumentasi Dependencies
 
-*   **Sistem Operasi:** Linux (Wayland / X11) - Diuji optimal pada Kubuntu / Ubuntu.
-*   **Perangkat Keras:** CH341A Programmer (USB ID `1a86:5512`).
-*   **Dependencies:**
-    *   `flashrom` (v1.6.0 atau versi terbaru)
-    *   `Node.js` (v22.x) & `npm`
-    *   `Rust` & `Cargo` compiler
+### A. System Level (Linux OS)
+*   **`flashrom` (v1.6.0+):** Utility backend utama untuk interaksi chip SPI Flash.
+*   **`lsusb`:** Utilitas sistem untuk deteksi koneksi USB programmer.
+*   **`WebKit2GTK`:** Engine rendering browser bawaan Linux untuk GUI Tauri.
+
+### B. Backend Level (Rust / Cargo)
+*   **`tauri` (v2.x):** Framework inti integrasi desktop dan security sandbox.
+*   **`tauri-plugin-dialog` & `tauri-plugin-fs`:** Plugin dialog buka/simpan file native OS serta read/write file lokal.
+*   **`regex`:** Engine pencarian pola teks berkecepatan tinggi untuk ekstraksi data DMI.
+*   **`md5`:** Library checksum MD5 untuk validasi file backup.
+*   **`serde` & `serde_json`:** Library serialisasi data pertukaran format JSON antara Rust & React.
+
+### C. Frontend Level (React / Node.js)
+*   **`React` & `Vite`:** React library dan build tool super cepat.
+*   **`Tailwind CSS v4` & `daisyUI v5`:** Framework styling bertema gelap (*Dark Mode default*).
+
+---
+
+## ⚙️ Cara Kerja Logika & Alur Data (Logic Workflow)
+
+Aplikasi ini menggunakan pola komunikasi **IPC (Inter-Process Communication)** asinkron antara Frontend dan Backend:
+
+```
++------------------+    IPC (Invoke)     +--------------------+
+|  React Frontend  | ------------------> |    Tauri Backend   |
+|     (UI-UX)      | <------------------ |  (Rust Executable) |
++------------------+    Event (Emit)     +--------------------+
+         |                                         |
+         v (Web Audio API)                         v (Command Line wrapper)
+     Sound Out                                 flashrom / lsusb
+```
+
+### A. Alur Kerja Deteksi & Pembacaan Chip (Detect & Read)
+1. User memicu aksi **Detect** / **Read** di frontend React.
+2. React memanggil fungsi Tauri IPC: `invoke("detect_chip")` atau `invoke("read_bios")`.
+3. Di Rust backend, thread baru dibuat (`std::thread::spawn`) agar proses panjang `flashrom` tidak membekukan (freeze) GUI.
+4. Rust menjalankan proses CLI `flashrom` di background dan menyaring output progress (`\d+%`) menggunakan regex untuk dipancarkan (*emit*) kembali ke React guna memperbarui progress bar di UI secara real-time.
+5. Selesai proses, biner BIOS dibaca ke array byte (`Vec<u8>`) di RAM dan dikirim ke React.
+
+### B. Logika Ekstraksi DMI & Windows Key (DMI Parser)
+Saat file BIOS selesai dimuat ke RAM, fungsi `extract_dmi_and_key` memproses data mentah biner:
+1.  **Pencarian Windows Key:** Memindai buffer biner untuk mencari header string `MSDM` (Microsoft Data Table) via `.windows(4).position(...)`. Jika ketemu, data 120-byte setelahnya diekstraksi menggunakan regex lisensi 25-digit.
+2.  **Identifikasi Brand & Model:** Mengonversi data biner ke string ASCII bersih dengan kompresi spasi ganda. Mencari signature produsen (`ASUS`, `LENOVO`, `DELL`, `HP`, `ACER`).
+3.  **HP & Dell Fallback:** Menggunakan regex pola khusus untuk mencari HP Serial Number (10 digit diawali `5CG/5CD/etc.`), HP Board ID (BID), dan Dell Service Tag (7 digit alfanumerik).
+
+### C. Logika Smart Hex Viewer (Auto-Skip 0xFF)
+*   **Cara kerja:** Fungsi `formatHex` di `App.jsx` memindai buffer. Jika area depan berisi data kosong (`0xFF` / `0x00`) beruntun melampaui `64KB`, viewer otomatis melompati area kosong tersebut (*auto-skip*) dan langsung menampilkan baris awal data pertama.
 
 ---
 
