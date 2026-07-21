@@ -193,11 +193,27 @@ export default function App() {
   const [diagnosticError, setDiagnosticError] = useState(null);
   const [copiedDiagnostic, setCopiedDiagnostic] = useState(false);
 
+  const searchInputRef = useRef(null);
   const instantStageRef = useRef(null); 
   const logRef = useRef(null);
 
   const appendLog = useCallback((msg) => {
     setStatusLog((prev) => prev + "\n" + msg);
+  }, []);
+
+  // Keyboard shortcut Ctrl+F to focus search input
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
+        e.preventDefault();
+        if (searchInputRef.current) {
+          searchInputRef.current.focus();
+          searchInputRef.current.select();
+        }
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
   useEffect(() => {
@@ -262,6 +278,37 @@ export default function App() {
       setCopiedDiagnostic(true);
       setTimeout(() => setCopiedDiagnostic(false), 2000);
     });
+  };
+
+  const handleSaveDiagnosticLog = async () => {
+    if (!diagnosticError) return;
+    try {
+      const path = await save({
+        title: "Save Debug Crash Log File",
+        defaultPath: `error_log_${diagnosticError.code || "crash"}_${new Date().toISOString().slice(0,10)}.log`,
+        filters: [{ name: "Log File", extensions: ["log", "txt", "json"] }],
+      });
+      if (!path) return;
+      const logContent = `====================================================
+MEGAPASS BIOS FLASHER - ERROR DIAGNOSTIC REPORT
+Timestamp: ${new Date().toISOString()}
+====================================================
+ERROR CODE : ${diagnosticError.code}
+MESSAGE    : ${diagnosticError.message}
+LOCATION   : ${diagnosticError.file}:${diagnosticError.line}
+CHIP TARGET: ${chip || "None Detected"}
+====================================================
+RAW CONTEXT:
+${diagnosticError.context || "No raw context"}
+====================================================
+`;
+      const encoder = new TextEncoder();
+      await invoke("backup_bios", { path, data: Array.from(encoder.encode(logContent)) });
+      appendLog(`💾 Diagnostic crash log saved to: ${path}`);
+      playSound('success');
+    } catch (e) {
+      console.error("Save log error failed:", e);
+    }
   };
 
   const handleSearch = () => {
@@ -780,8 +827,9 @@ export default function App() {
           {/* Opsi B Search Panel */}
           <div className="p-2 bg-base-300/80 border-b border-base-content/10 flex items-center gap-2">
             <input
+              ref={searchInputRef}
               type="text"
-              placeholder="Search Text or Hex (e.g. AMIBIOS or 0x4D53444D)..."
+              placeholder="Search Text or Hex (e.g. AMIBIOS or 0x4D53444D)... (Ctrl+F)"
               className="input input-bordered input-sm flex-1 font-mono text-xs focus:input-primary"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -1043,16 +1091,24 @@ export default function App() {
 
             <p className="text-[9px] text-red-400 italic mb-4">💡 Tip: Klik tombol di bawah ini lalu paste log ke AI untuk perbaikan langsung tanpa halusinasi.</p>
 
-            <div className="modal-action">
-              <button className="btn btn-sm btn-ghost text-white hover:bg-white/10" onClick={() => setDiagnosticError(null)}>
-                Tutup
-              </button>
+            <div className="modal-action flex justify-between items-center w-full">
               <button 
-                className={`btn btn-sm ${copiedDiagnostic ? "btn-success text-white" : "btn-error text-white"}`}
-                onClick={handleCopyDiagnostic}
+                className="btn btn-sm btn-outline btn-warning font-mono"
+                onClick={handleSaveDiagnosticLog}
               >
-                {copiedDiagnostic ? "✓ Diagnostic Copied!" : "📋 Copy Diagnostic for AI"}
+                📥 Save Error Log (.log)
               </button>
+              <div className="flex gap-2">
+                <button className="btn btn-sm btn-ghost text-white hover:bg-white/10" onClick={() => setDiagnosticError(null)}>
+                  Tutup
+                </button>
+                <button 
+                  className={`btn btn-sm ${copiedDiagnostic ? "btn-success text-white" : "btn-error text-white"}`}
+                  onClick={handleCopyDiagnostic}
+                >
+                  {copiedDiagnostic ? "✓ Diagnostic Copied!" : "📋 Copy Diagnostic for AI"}
+                </button>
+              </div>
             </div>
           </div>
         </div>
