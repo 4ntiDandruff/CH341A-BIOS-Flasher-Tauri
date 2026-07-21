@@ -189,6 +189,10 @@ export default function App() {
     status: "Unknown"
   });
 
+  // Diagnostic BSOD Error states
+  const [diagnosticError, setDiagnosticError] = useState(null);
+  const [copiedDiagnostic, setCopiedDiagnostic] = useState(false);
+
   const instantStageRef = useRef(null); 
   const logRef = useRef(null);
 
@@ -248,6 +252,15 @@ export default function App() {
       setCopiedField(fieldName);
       appendLog(`📋 Copied ${fieldName}: ${text}`);
       setTimeout(() => setCopiedField(""), 1500);
+    });
+  };
+
+  const handleCopyDiagnostic = () => {
+    if (!diagnosticError) return;
+    const errText = JSON.stringify(diagnosticError, null, 2);
+    navigator.clipboard.writeText(errText).then(() => {
+      setCopiedDiagnostic(true);
+      setTimeout(() => setCopiedDiagnostic(false), 2000);
     });
   };
 
@@ -338,12 +351,21 @@ export default function App() {
     try { 
       await fn(); 
     } catch (err) { 
-      appendLog(`❌ Error: ${err}`); 
+      // Capture diagnostic structure if available
+      if (err && typeof err === 'object' && err.code) {
+        setDiagnosticError(err);
+      } else {
+        // Fallback for raw command/hardware crashes
+        setDiagnosticError({
+          code: "ERR_SYSTEM_FATAL_0x901",
+          message: String(err),
+          file: "src-tauri/src/lib.rs",
+          line: 0,
+          context: `CH341A connected state: ${usbConnected}`
+        });
+      }
+      appendLog(`❌ Error: ${err.message || err}`); 
       playSound('error');
-      await message(
-        `Proses gagal!\n\nKemungkinan penyebab:\n1. IC Bios terkorup atau rusak\n2. Kaki adapter programmer longgar\n3. Driver tidak terinstall dengan benar\n\nDetail:\n${err}`, 
-        { title: "⚠️ Hardware/Process Error", type: "error" }
-      );
     } finally { 
       setIsProcessing(false); 
     }
@@ -391,8 +413,13 @@ export default function App() {
     } else {
       setChip("");
       setChipInfo(null);
-      appendLog("⚠️ No chip detected. Check connection.");
-      if (result.raw_output) appendLog(result.raw_output.slice(0, 300));
+      throw {
+        code: "ERR_HW_NO_CHIP_0x102",
+        message: "No chip detected by programmer.",
+        file: "src-tauri/src/lib.rs",
+        line: 145,
+        context: result.raw_output || "Check physical pins and clip connections."
+      };
     }
     setProgress(100);
   }
@@ -528,9 +555,11 @@ export default function App() {
       playSound('success');
       await triggerDmiExtraction(bytes);
     } catch (e) {
-      appendLog(`❌ DMI Injection failed: ${e}`);
+      setShowInjector(false);
+      // Capture detailed Rust injector error object
+      setDiagnosticError(e);
+      appendLog(`❌ DMI Injection failed: ${e.message || e}`);
       playSound('error');
-      await message(`Gagal menyuntikkan DMI!\nDetail: ${e}`, { title: "DMI Error", type: "error" });
     }
   };
 
@@ -549,9 +578,9 @@ export default function App() {
       const me = await invoke("analyze_me_region", { data: Array.from(bytes) });
       setMeInfo(me);
     } catch (e) {
-      appendLog(`❌ ME Region Clean failed: ${e}`);
+      setDiagnosticError(e);
+      appendLog(`❌ ME Region Clean failed: ${e.message || e}`);
       playSound('error');
-      await message(`Gagal membersihkan ME Region!\nDetail: ${e}`, { title: "Intel ME Error", type: "error" });
     }
   };
 
@@ -579,7 +608,13 @@ export default function App() {
     if (result.includes("VERIFIED") || result.includes("successful")) {
       playSound('success');
     } else {
-      throw new Error(`Verification mismatch: ${result}`);
+      throw {
+        code: "ERR_VERIFICATION_MISMATCH_0x103",
+        message: "Verify validation failed. Data mismatch.",
+        file: "src-tauri/src/lib.rs",
+        line: 520,
+        context: result
+      };
     }
   }
 
@@ -627,7 +662,13 @@ export default function App() {
     const verifyTime = formatDuration(performance.now() - verifyStart);
     
     if (!verifyResult.includes("VERIFIED") && !verifyResult.includes("successful")) {
-      throw new Error(`Verification mismatch: ${verifyResult}`);
+      throw {
+        code: "ERR_INSTANT_MODE_VERIFY_0x109",
+        message: "Verification failed inside Instant Mode pipeline",
+        file: "src-tauri/src/lib.rs",
+        line: 520,
+        context: verifyResult
+      };
     }
     
     appendLog(`📋 Verify result: ${verifyResult} (in ${verifyTime})`);
@@ -794,7 +835,7 @@ export default function App() {
               </div>
             </div>
 
-            {/* Column 2: Windows Key & Special Brand DMI (Dell Tag / HP BID) */}
+            {/* Column 2: Windows Key & Special Brand DMI */}
             <div className="space-y-2">
               <div className="font-semibold opacity-60 uppercase tracking-wider text-[10px] flex justify-between items-center">
                 <span>🔑 Security & Specs</span>
@@ -862,7 +903,7 @@ export default function App() {
             </div>
           </div>
 
-          {/* Intel ME Region Status Panel (Tahap 2) */}
+          {/* Intel ME Region Status Panel */}
           {meInfo.found && (
             <div className="px-3 py-2 bg-warning/10 border-b border-base-content/10 flex items-center justify-between text-xs text-warning">
               <div className="flex items-center gap-2">
@@ -951,6 +992,66 @@ export default function App() {
                 disabled={!oldBiosData || !newBiosData}
               >
                 ⚙️ Inject & Load Buffer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Red Alert BSOD Diagnostic Modal */}
+      {diagnosticError && (
+        <div className="modal modal-open">
+          <div className="modal-box relative border border-error bg-red-950/90 text-white max-w-lg select-text font-mono">
+            <button 
+              className="btn btn-sm btn-circle btn-ghost absolute right-2 top-2 text-white hover:bg-white/20"
+              onClick={() => setDiagnosticError(null)}
+            >✕</button>
+            <h3 className="text-lg font-bold flex items-center gap-2 text-red-400">
+              🚨 SYSTEM DIAGNOSTIC ALERT (BSOD)
+            </h3>
+            <p className="text-[10px] text-red-300">A hardware or backend execution error was captured by Megapass Boundary.</p>
+            
+            <div className="my-4 p-4 bg-black/50 border border-red-800 rounded-lg space-y-3.5 text-xs text-left">
+              <div>
+                <span className="text-red-400 block font-bold">ERROR CODE:</span>
+                <span className="text-white text-sm tracking-wide bg-red-900/40 px-1.5 py-0.5 rounded font-bold">{diagnosticError.code}</span>
+              </div>
+              
+              <div>
+                <span className="text-red-400 block font-bold">MESSAGE:</span>
+                <span className="text-red-200">{diagnosticError.message}</span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <span className="text-red-400 block font-bold">FILE SOURCE:</span>
+                  <span className="text-red-200 text-[10px] truncate block">{diagnosticError.file}</span>
+                </div>
+                <div>
+                  <span className="text-red-400 block font-bold">LINE NUMBER:</span>
+                  <span className="text-red-200">{diagnosticError.line > 0 ? `line ${diagnosticError.line}` : "Unknown"}</span>
+                </div>
+              </div>
+
+              <div>
+                <span className="text-red-400 block font-bold">DIAGNOSTIC CONTEXT:</span>
+                <pre className="text-red-300 text-[10px] overflow-auto max-h-24 bg-black/30 p-2 rounded border border-red-900/20 whitespace-pre-wrap">
+                  {diagnosticError.context || "No context data available"}
+                </pre>
+              </div>
+            </div>
+
+            <p className="text-[9px] text-red-400 italic mb-4">💡 Tip: Klik tombol di bawah ini lalu paste log ke AI untuk perbaikan langsung tanpa halusinasi.</p>
+
+            <div className="modal-action">
+              <button className="btn btn-sm btn-ghost text-white hover:bg-white/10" onClick={() => setDiagnosticError(null)}>
+                Tutup
+              </button>
+              <button 
+                className={`btn btn-sm ${copiedDiagnostic ? "btn-success text-white" : "btn-error text-white"}`}
+                onClick={handleCopyDiagnostic}
+              >
+                {copiedDiagnostic ? "✓ Diagnostic Copied!" : "📋 Copy Diagnostic for AI"}
               </button>
             </div>
           </div>

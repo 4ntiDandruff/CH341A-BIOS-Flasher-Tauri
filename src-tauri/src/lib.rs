@@ -7,6 +7,27 @@ use std::process::{Command, Stdio};
 use tauri::{Emitter, Manager};
 
 #[derive(Serialize, Deserialize, Clone)]
+struct DiagnosticError {
+    code: String,
+    message: String,
+    file: String,
+    line: u32,
+    context: String,
+}
+
+macro_rules! diagnose_err {
+    ($code:expr, $msg:expr, $ctx:expr) => {
+        DiagnosticError {
+            code: $code.to_string(),
+            message: $msg.to_string(),
+            file: file!().to_string(),
+            line: line!(),
+            context: $ctx.to_string(),
+        }
+    };
+}
+
+#[derive(Serialize, Deserialize, Clone)]
 struct ProgressPayload {
     percent: f64,
     stage: String,
@@ -215,23 +236,21 @@ fn open_backup(path: String) -> Result<Vec<u8>, String> {
 }
 
 #[tauri::command]
-fn inject_dmi(data_old: Vec<u8>, data_new: Vec<u8>) -> Result<Vec<u8>, String> {
+fn inject_dmi(data_old: Vec<u8>, data_new: Vec<u8>) -> Result<Vec<u8>, DiagnosticError> {
     if data_old.is_empty() || data_new.is_empty() {
-        return Err("File data cannot be empty".to_string());
+        return Err(diagnose_err!(
+            "ERR_DMI_EMPTY_BUFFER_0x201",
+            "BIOS buffer data is empty",
+            format!("data_old_len: {}, data_new_len: {}", data_old.len(), data_new.len())
+        ));
     }
 
     let mut output_data = data_new.clone();
-    
-    // We search for DMI region signature or Win Key table "MSDM" to locate DMI Block
-    // In most modern laptops, DMI data sits in a 64KB block containing Serial / Windows Key
-    // Let's locate the Windows OEM activation key "MSDM" table first
     let mut dmi_offset: Option<usize> = None;
     if let Some(pos) = data_old.windows(4).position(|w| w == b"MSDM") {
-        // Block start is usually aligned to 0x1000 (4KB) boundaries
         dmi_offset = Some((pos / 0x1000) * 0x1000);
     }
     
-    // Fallback: search for HP DMI signature block "NCB" or "DMI" string
     if dmi_offset.is_none() {
         if let Some(pos) = data_old.windows(3).position(|w| w == b"NCB" || w == b"DMI") {
             dmi_offset = Some((pos / 0x1000) * 0x1000);
@@ -239,17 +258,13 @@ fn inject_dmi(data_old: Vec<u8>, data_new: Vec<u8>) -> Result<Vec<u8>, String> {
     }
 
     if let Some(offset) = dmi_offset {
-        // Safe check to ensure we don't exceed buffer lengths
-        let block_size = 0x10000; // 64KB DMI block size
+        let block_size = 0x10000;
         if offset + block_size <= data_old.len() && offset + block_size <= output_data.len() {
-            // Overwrite the DMI block in clean bios with old bios data
             output_data[offset..offset + block_size].copy_from_slice(&data_old[offset..offset + block_size]);
             return Ok(output_data);
         }
     }
 
-    // Default Fallback: Try searching for individual Windows Key replacement
-    // If exact block transfer is risky, we directly search and replace the 29-byte MSDM key
     if let Some(old_msdm_pos) = data_old.windows(4).position(|w| w == b"MSDM") {
         if let Some(new_msdm_pos) = output_data.windows(4).position(|w| w == b"MSDM") {
             let old_key_segment = &data_old[old_msdm_pos..std::cmp::min(data_old.len(), old_msdm_pos + 120)];
@@ -260,7 +275,6 @@ fn inject_dmi(data_old: Vec<u8>, data_new: Vec<u8>) -> Result<Vec<u8>, String> {
                 if let Some(old_mat) = re_key.find(&old_text) {
                     let old_key_str = old_mat.as_str();
                     
-                    // Replace key inside output buffer
                     if let Ok(new_text) = String::from_utf8(new_key_segment.to_vec()) {
                         if let Some(new_mat) = re_key.find(&new_text) {
                             let start_replace = new_msdm_pos + new_mat.start();
@@ -274,7 +288,11 @@ fn inject_dmi(data_old: Vec<u8>, data_new: Vec<u8>) -> Result<Vec<u8>, String> {
         }
     }
 
-    Err("Could not locate compatible DMI/MSDM block offsets to inject".to_string())
+    Err(diagnose_err!(
+        "ERR_DMI_SIGNATURE_NOT_FOUND_0x202",
+        "Could not locate compatible DMI/MSDM block offsets to inject",
+        format!("data_old_len: {}, data_new_len: {}", data_old.len(), data_new.len())
+    ))
 }
 
 #[tauri::command]
@@ -339,22 +357,29 @@ fn analyze_me_region(data: Vec<u8>) -> serde_json::Value {
 }
 
 #[tauri::command]
-fn clean_me_region(data: Vec<u8>) -> Result<Vec<u8>, String> {
+fn clean_me_region(data: Vec<u8>) -> Result<Vec<u8>, DiagnosticError> {
     if data.is_empty() {
-        return Err("Buffer is empty".to_string());
+        return Err(diagnose_err!(
+            "ERR_ME_EMPTY_BUFFER_0x301",
+            "BIOS buffer is empty",
+            "data_len: 0"
+        ));
     }
 
     let mut output_data = data.clone();
     if let Some(pos) = output_data.windows(4).position(|w| w == b"$FPT") {
-        // Reset/clean the ME partition header state byte (at offset + 16 of $FPT)
         let state_offset = pos + 16;
         if state_offset < output_data.len() {
-            output_data[state_offset] = 0xFF; // Set to Unconfigured state
+            output_data[state_offset] = 0xFF;
+            return Ok(output_data);
         }
-        return Ok(output_data);
     }
 
-    Err("Could not locate Intel ME $FPT header to clean".to_string())
+    Err(diagnose_err!(
+        "ERR_ME_FPT_HEADER_NOT_FOUND_0x302",
+        "Could not locate Intel ME $FPT header in buffer to clean",
+        format!("buffer_len: {}", data.len())
+    ))
 }
 
 #[tauri::command]
