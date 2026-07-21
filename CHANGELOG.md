@@ -2,6 +2,17 @@
 
 Semua catatan perubahan penting pada proyek **BIOS Flasher** milik Megapass Sidoarjo akan dicatat di file ini secara berkala.
 
+## [2.1.2] - 2026-07-21
+### Added
+- **💉 DMI Injector (Identity Merger):** Fitur pemindah otomatis data DMI asli (Serial/Windows Key) dari BIOS rusak ke Clean BIOS dalam 1 klik.
+- **🧹 Intel ME Region Cleaner & Detector:** Deteksi otomatis region Intel ME ($FPT) dan fitur pembersihan status inisialisasi (Dirty -> Clean Unconfigured State) untuk memperbaiki penyakit *late display / restart 30 menit*.
+- **📊 Side-by-Side Hex Diff Viewer:** Pembanding visual file biner BIOS secara byte-per-byte langsung ditandai dengan highlight bintang merah `*XX*` di Hex Viewer.
+- **🚨 BSOD Red Alert Diagnostic Boundary:** Penangkapan error sistem di level hardware/software dengan sajian data error terstruktur (Kode Error, File Source, Line, & Context) untuk menyalin log terformat bagi asisten AI tanpa halusinasi.
+
+### Fixed
+- Perbaikan Tauri IPC camelCase mapping pada command `inject_dmi` dan `compare_bios_diff` (pemetaan `data_old`/`data_new` ke `dataOld`/`dataNew` & `data_a`/`data_b` ke `dataA`/`dataB`).
+- Penyempurnaan layout vertikal menu sidebar kiri tanpa scrollbar (mengecilkan padding vertikal tombol menu menjadi `py-2` dan memindahkan DMI Injector ke bagian bawah menu).
+
 ## [2.1.0] - 2026-07-21
 ### Added
 - **📟 Smart DMI & License Auto-Extractor (Offline):**

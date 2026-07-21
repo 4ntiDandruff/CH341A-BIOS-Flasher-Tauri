@@ -15,10 +15,13 @@ Aplikasi GUI modern, super cepat, dan ringan berbasis **Tauri v2 (Rust Backend &
 1.  **🔍 Auto-Detect Chip (1-Click):** Mendeteksi IC EEPROM SPI secara instan beserta informasi voltage (1.8V / 3.3V) dan tipe package.
 2.  **📖 Fast Read & Buffer Analytics:** Membaca firmware BIOS ke buffer memori RAM dengan analisis persentase data terpakai (non-FF bytes).
 3.  **📟 Smart DMI & License Auto-Extractor (Offline):** Ekstraksi Windows Product Key (MSDM), Serial Number (S/N), Dell Service Tag, dan HP Board ID (BID) secara otomatis dilengkapi tombol copy clipboard 📋.
-4.  **⚡ Instant Mode:** Pipeline otomatisasi sekali jalan: Erase → Write → Verify.
-5.  **🔍 Hex Viewer dengan Local Search:** Hex Viewer responsif dengan skip otomatis data kosong `0xFF` dan fitur pencarian string text/hex.
-6.  **🟢 Live USB Pulse Indicator:** Indikator pendeteksi status koneksi hardware programmer CH341A secara real-time.
-7.  **🔊 Chime & Alert Sound:** Web Audio API untuk nada status (Chime sukses, Buzz gagal).
+4.  **💉 DMI Injector (Identity Merger):** Memindahkan data DMI asli (Serial/Windows Key) dari BIOS lama (korup) ke BIOS baru (Clean) secara aman dan instan dengan 1 klik sebelum di-flash.
+5.  **🧹 Intel ME Region Cleaner & Detector:** Deteksi otomatis region Intel ME (Management Engine) dan pembersihan status initialization (Dirty -> Clean Unconfigured State) untuk mengatasi problem laptop *late display / restart 30 menit*.
+6.  **📊 Side-by-Side Hex Diff Viewer:** Fitur pembanding dua file biner BIOS secara byte-per-byte dengan penandaan (highlight) visual bintang merah `*XX*` di Hex Viewer untuk byte yang memiliki perbedaan.
+7.  **🚨 BSOD Red Alert Diagnostic Boundary:** Menangkap crash/error sistem di level hardware/software dan menyajikan data error terstruktur (Kode Error, File Source, Line, & Context) untuk memudahkan perbaikan instan oleh AI tanpa halusinasi.
+8.  **⚡ Instant Mode:** Pipeline otomatisasi sekali jalan: Erase → Write → Verify.
+9.  **🟢 Live USB Pulse Indicator:** Indikator pendeteksi status koneksi hardware programmer CH341A secara real-time.
+10. **🔊 Chime & Alert Sound:** Web Audio API untuk nada status (Chime sukses, Buzz gagal).
 
 ---
 
