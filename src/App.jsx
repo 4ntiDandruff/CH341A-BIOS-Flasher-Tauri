@@ -14,6 +14,37 @@ const MENU_ITEMS = [
   { id: 8, icon: "💉", label: "DMI Injector", direct: true },
 ];
 
+const INDO_CHANGELOG = [
+  {
+    version: "v2.1.2",
+    date: "2026-07-21",
+    items: [
+      "💉 Fitur DMI Injector: Pemindahan otomatis lisensi Windows Key & Serial dari BIOS rusak ke Clean BIOS.",
+      "🧹 Intel ME Cleaner: Pembersihan ME region untuk mengatasi problem laptop late display / mati setelah 30 menit.",
+      "📊 Side-by-Side Hex Diff: Pembanding visual byte-per-byte langsung ditandai bintang merah (*XX*) pada Hex Viewer.",
+      "🚨 Diagnostik Error Terstruktur (BSOD Red Modal): Laporan crash mendalam & tombol ekspor file log (.log)."
+    ]
+  },
+  {
+    version: "v2.1.0",
+    date: "2026-07-21",
+    items: [
+      "📟 Fitur DMI & License Auto-Extractor: Ekstraksi Windows Product Key (MSDM), Serial Number, HP BID, & Dell Service Tag.",
+      "📋 Salin Clipboard Instan: Tombol copy cepat di setiap field DMI.",
+      "🔍 Hex Search: Input pencarian teks ASCII & Hex string langsung di atas viewer.",
+      "⚡ Instant Mode: Erase → Write → Verify otomatis dalam sekali jalan."
+    ]
+  },
+  {
+    version: "v2.0.0",
+    date: "2026-07-19",
+    items: [
+      "🎨 Migrasi GUI Python GTK3 ke Tauri (React + Tailwind CSS + DaisyUI).",
+      "🖥️ Tampilan Modern Split Layout (Menu 40% | Hex Viewer 60%) dan Dark Mode bawaan."
+    ]
+  }
+];
+
 function formatDuration(ms) {
   const totalSecs = Math.floor(ms / 1000);
   const mins = Math.floor(totalSecs / 60).toString().padStart(2, "0");
@@ -154,6 +185,7 @@ export default function App() {
   const [usbConnected, setUsbConnected] = useState(false);
   const [instantMode, setInstantMode] = useState(false);
   const [showAbout, setShowAbout] = useState(false);
+  const [showChangelog, setShowChangelog] = useState(false);
   
   // DMI & Search states
   const [searchQuery, setSearchQuery] = useState("");
@@ -762,6 +794,12 @@ ${diagnosticError.context || "No raw context"}
         <div className="flex items-center gap-3 text-sm opacity-70">
           <span>Buffer: <strong>{bufferSize}</strong></span>
           {fileName && <span className="truncate max-w-48" title={fileName}>📁 {fileName.split(/[/\\]/).pop()}</span>}
+          <button 
+            className="btn btn-xs btn-outline btn-primary font-mono text-[10px]"
+            onClick={() => setShowChangelog(true)}
+          >
+            📜 Catatan Rilis
+          </button>
         </div>
       </div>
 
@@ -1148,6 +1186,46 @@ ${diagnosticError.context || "No raw context"}
             <div className="modal-action">
               <button className="btn btn-primary btn-sm" onClick={() => setShowAbout(false)}>
                 Tutup
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Indonesian Changelog Modal */}
+      {showChangelog && (
+        <div className="modal modal-open">
+          <div className="modal-box relative border border-base-content/10 bg-base-200 max-w-lg select-text">
+            <button 
+              className="btn btn-sm btn-circle absolute right-2 top-2"
+              onClick={() => setShowChangelog(false)}
+            >✕</button>
+            <h3 className="text-lg font-bold flex items-center gap-2 text-primary">
+              📜 Catatan Rilis (Changelog) - Megapass
+            </h3>
+            <p className="text-xs opacity-60 mt-1">Daftar pembaruan fitur flasher Megapass Sidoarjo</p>
+            
+            <div className="my-4 space-y-4 max-h-[350px] overflow-y-auto pr-1">
+              {INDO_CHANGELOG.map((log) => (
+                <div key={log.version} className="border-b border-base-content/10 pb-3 last:border-0">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="font-mono font-bold text-sm bg-primary/10 px-2 py-0.5 rounded text-primary">
+                      {log.version}
+                    </span>
+                    <span className="text-[10px] opacity-50 font-mono">{log.date}</span>
+                  </div>
+                  <ul className="list-disc pl-5 space-y-1 text-xs opacity-90 leading-relaxed text-left">
+                    {log.items.map((item, idx) => (
+                      <li key={idx}>{item}</li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+
+            <div className="modal-action">
+              <button className="btn btn-primary btn-sm" onClick={() => setShowChangelog(false)}>
+                Tutup Catatan
               </button>
             </div>
           </div>
