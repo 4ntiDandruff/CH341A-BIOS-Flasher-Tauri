@@ -85,14 +85,12 @@ fn run_flashrom_with_progress(
     let stage_owned = stage.to_string();
     let stderr_handle = std::thread::spawn(move || {
         let mut lines = Vec::new();
-        for line in reader.lines() {
-            if let Ok(line) = line {
-                if let Some(pct) = parse_progress(&line) {
-                    emit_progress(&win, pct, &stage_owned);
-                }
-                emit_log(&win, &line);
-                lines.push(line);
+        for line in reader.lines().map_while(Result::ok) {
+            if let Some(pct) = parse_progress(&line) {
+                emit_progress(&win, pct, &stage_owned);
             }
+            emit_log(&win, &line);
+            lines.push(line);
         }
         lines.join("\n")
     });
@@ -102,7 +100,7 @@ fn run_flashrom_with_progress(
         .take()
         .map(|s| {
             let r = BufReader::new(s);
-            r.lines().filter_map(|l| l.ok()).collect::<Vec<_>>().join("\n")
+            r.lines().map_while(Result::ok).collect::<Vec<_>>().join("\n")
         })
         .unwrap_or_default();
 
@@ -332,7 +330,7 @@ fn analyze_me_region(data: Vec<u8>) -> serde_json::Value {
         let end = std::cmp::min(data.len(), pos + 512);
         let segment = &data[start..end];
         let ascii_segment: String = segment.iter()
-            .map(|&b| if b.is_ascii() && b >= 0x20 && b <= 0x7E { b as char } else { ' ' })
+            .map(|&b| if b.is_ascii() && (0x20..=0x7E).contains(&b) { b as char } else { ' ' })
             .collect();
 
         let re_ver = Regex::new(r"\b(\d{1,2}\.\d{1,2}\.\d{1,2}\.\d{4})\b").unwrap();
@@ -407,12 +405,10 @@ fn extract_dmi_and_key(data: Vec<u8>) -> serde_json::Value {
     // Convert printable ASCII chars, ignoring wide spaces/nulls
     let mut ascii_chars = Vec::new();
     for &b in &data {
-        if b.is_ascii() && b >= 0x20 && b <= 0x7E {
+        if b.is_ascii() && (0x20..=0x7E).contains(&b) {
             ascii_chars.push(b as char);
-        } else if b == 0x00 || b == 0x0A || b == 0x0D {
-            if ascii_chars.last() != Some(&' ') {
-                ascii_chars.push(' ');
-            }
+        } else if (b == 0x00 || b == 0x0A || b == 0x0D) && ascii_chars.last() != Some(&' ') {
+            ascii_chars.push(' ');
         }
     }
     
@@ -609,7 +605,7 @@ fn get_chip_info(chip: String, app_handle: tauri::AppHandle) -> Result<serde_jso
     for (key, info) in &chips {
         let parts: Vec<&str> = key.split('/').collect();
         for part in &parts {
-            if part.eq_ignore_ascii_case(&chip) || chip.contains(part) || part.contains(&chip.as_str()) {
+            if part.eq_ignore_ascii_case(&chip) || chip.contains(part) || part.contains(chip.as_str()) {
                 return Ok(serde_json::json!({
                     "found": true,
                     "name": key,
