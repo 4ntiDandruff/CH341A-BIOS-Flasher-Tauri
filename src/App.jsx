@@ -100,7 +100,7 @@ function formatHex(bytes, highlightOffset = -1, searchLen = 0, diffOffsets = [])
     lines.push("");
   }
 
-  const showBytes = 32768; // Reduce display bytes for smoother diff rendering
+  const showBytes = 32768;
   const endOffset = Math.min(totalSize, startOffset + showBytes);
 
   for (let i = startOffset; i < endOffset; i += 16) {
@@ -118,7 +118,7 @@ function formatHex(bytes, highlightOffset = -1, searchLen = 0, diffOffsets = [])
         const isDiff = diffOffsets.includes(idx);
         
         if (isDiff) {
-          hexParts.push(`*${hexStr}*`); // Star marker for differences
+          hexParts.push(`*${hexStr}*`);
         } else if (isMatch) {
           hexParts.push(`>${hexStr}<`);
         } else {
@@ -179,6 +179,15 @@ export default function App() {
   
   const [diffOffsets, setDiffOffsets] = useState([]);
   const [comparisonTargetName, setComparisonTargetName] = useState("");
+
+  // Intel ME Region Cleaner states
+  const [meInfo, setMeInfo] = useState({
+    found: false,
+    offset: "Not Found",
+    size_kb: 0,
+    version: "Unknown",
+    status: "Unknown"
+  });
 
   const instantStageRef = useRef(null); 
   const logRef = useRef(null);
@@ -299,8 +308,15 @@ export default function App() {
       if (info.brand !== "Unknown") {
         appendLog(`📋 Identified Device: ${info.brand} ${info.model}`);
       }
+
+      // Trigger Intel ME Region analysis
+      const me = await invoke("analyze_me_region", { data: Array.from(bytes) });
+      setMeInfo(me);
+      if (me.found) {
+        appendLog(`⚙️ Intel ME Region Detected at ${me.offset} (Ver: ${me.version})`);
+      }
     } catch (e) {
-      console.error("DMI Extraction failed:", e);
+      console.error("Extraction/Analysis failed:", e);
     }
   };
 
@@ -515,6 +531,27 @@ export default function App() {
       appendLog(`❌ DMI Injection failed: ${e}`);
       playSound('error');
       await message(`Gagal menyuntikkan DMI!\nDetail: ${e}`, { title: "DMI Error", type: "error" });
+    }
+  };
+
+  // Intel ME Region Clean
+  const handleCleanMeRegion = async () => {
+    if (!buffer || buffer.length === 0) return;
+    if (!window.confirm("🧹 Clean Intel ME Region?\nThis resets ME initialized state back to factory unconfigured state to fix late-display issues.")) return;
+    try {
+      appendLog("🧹 Resetting/Cleaning Intel ME Region header state...");
+      const result = await invoke("clean_me_region", { data: Array.from(buffer) });
+      const bytes = new Uint8Array(result);
+      setBuffer(bytes);
+      appendLog("✅ Intel ME Region cleaned successfully! Reloaded state to buffer.");
+      playSound('success');
+      
+      const me = await invoke("analyze_me_region", { data: Array.from(bytes) });
+      setMeInfo(me);
+    } catch (e) {
+      appendLog(`❌ ME Region Clean failed: ${e}`);
+      playSound('error');
+      await message(`Gagal membersihkan ME Region!\nDetail: ${e}`, { title: "Intel ME Error", type: "error" });
     }
   };
 
@@ -757,7 +794,7 @@ export default function App() {
               </div>
             </div>
 
-            {/* Column 2: Windows Key & Special Brand DMI */}
+            {/* Column 2: Windows Key & Special Brand DMI (Dell Tag / HP BID) */}
             <div className="space-y-2">
               <div className="font-semibold opacity-60 uppercase tracking-wider text-[10px] flex justify-between items-center">
                 <span>🔑 Security & Specs</span>
@@ -824,6 +861,19 @@ export default function App() {
               )}
             </div>
           </div>
+
+          {/* Intel ME Region Status Panel (Tahap 2) */}
+          {meInfo.found && (
+            <div className="px-3 py-2 bg-warning/10 border-b border-base-content/10 flex items-center justify-between text-xs text-warning">
+              <div className="flex items-center gap-2">
+                <span>⚙️ <strong>Intel ME Region:</strong> Detected at <strong>{meInfo.offset}</strong> (Ver: {meInfo.version})</span>
+                <span className="badge badge-warning badge-sm uppercase font-bold text-[9px]">{meInfo.status}</span>
+              </div>
+              <button className="btn btn-warning btn-xs px-3 font-bold" onClick={handleCleanMeRegion}>
+                🧹 Clean ME Region
+              </button>
+            </div>
+          )}
 
           <div className="flex-1 overflow-auto p-2">
             <pre className="hex-viewer w-full h-full p-3 rounded-lg overflow-auto font-mono text-xs select-text">

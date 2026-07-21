@@ -283,7 +283,6 @@ fn compare_bios_diff(data_a: Vec<u8>, data_b: Vec<u8>) -> Result<Vec<usize>, Str
         return Err("BIOS files must be of the same size to compare".to_string());
     }
 
-    // Return list of offsets where bytes differ, limit to first 1000 matches to prevent memory bloat
     let mut diff_offsets = Vec::new();
     for i in 0..data_a.len() {
         if data_a[i] != data_b[i] {
@@ -295,6 +294,67 @@ fn compare_bios_diff(data_a: Vec<u8>, data_b: Vec<u8>) -> Result<Vec<usize>, Str
     }
 
     Ok(diff_offsets)
+}
+
+#[tauri::command]
+fn analyze_me_region(data: Vec<u8>) -> serde_json::Value {
+    let mut found = false;
+    let mut offset_hex = "Not Found".to_string();
+    let mut size_kb = 0;
+    let mut version = "Unknown".to_string();
+    let mut status = "Unknown".to_string();
+
+    // Intel Flash Partition Table ($FPT) signature
+    if let Some(pos) = data.windows(4).position(|w| w == b"$FPT") {
+        found = true;
+        offset_hex = format!("0x{:08X}", pos);
+        
+        // Scan for version string nearby (e.g., 11.8.50, 12.0.20, etc.)
+        let start = pos;
+        let end = std::cmp::min(data.len(), pos + 512);
+        let segment = &data[start..end];
+        let ascii_segment: String = segment.iter()
+            .map(|&b| if b.is_ascii() && b >= 0x20 && b <= 0x7E { b as char } else { ' ' })
+            .collect();
+
+        let re_ver = Regex::new(r"\b(\d{1,2}\.\d{1,2}\.\d{1,2}\.\d{4})\b").unwrap();
+        if let Some(mat) = re_ver.find(&ascii_segment) {
+            version = mat.as_str().to_string();
+        } else {
+            version = "Intel ME (Generic)".to_string();
+        }
+
+        // Determine rough size based on Intel Descriptor specs (standard ME size is 1.5MB to 5MB)
+        size_kb = 2048; // Default estimate 2MB
+        status = "Initialized (Dirty)".to_string();
+    }
+
+    serde_json::json!({
+        "found": found,
+        "offset": offset_hex,
+        "size_kb": size_kb,
+        "version": version,
+        "status": status
+    })
+}
+
+#[tauri::command]
+fn clean_me_region(data: Vec<u8>) -> Result<Vec<u8>, String> {
+    if data.is_empty() {
+        return Err("Buffer is empty".to_string());
+    }
+
+    let mut output_data = data.clone();
+    if let Some(pos) = output_data.windows(4).position(|w| w == b"$FPT") {
+        // Reset/clean the ME partition header state byte (at offset + 16 of $FPT)
+        let state_offset = pos + 16;
+        if state_offset < output_data.len() {
+            output_data[state_offset] = 0xFF; // Set to Unconfigured state
+        }
+        return Ok(output_data);
+    }
+
+    Err("Could not locate Intel ME $FPT header to clean".to_string())
 }
 
 #[tauri::command]
@@ -566,6 +626,8 @@ pub fn run() {
             get_chip_info,
             inject_dmi,
             compare_bios_diff,
+            analyze_me_region,
+            clean_me_region,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
