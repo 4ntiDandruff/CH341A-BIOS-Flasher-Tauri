@@ -500,8 +500,8 @@ export default function App() {
       appendLog(`🔍 Comparing current buffer with ${path.split(/[/\\]/).pop()}...`);
       const targetData = await invoke("open_backup", { path });
       const offsets = await invoke("compare_bios_diff", { 
-        data_a: Array.from(buffer), 
-        data_b: targetData 
+        dataA: Array.from(buffer), 
+        dataB: Array.from(targetData) 
       });
       setDiffOffsets(offsets);
       setComparisonTargetName(path.split(/[/\\]/).pop());
@@ -541,8 +541,8 @@ export default function App() {
     try {
       appendLog("💉 Injecting original DMI data into Clean BIOS...");
       const result = await invoke("inject_dmi", { 
-        data_old: oldBiosData, 
-        data_new: newBiosData 
+        dataOld: Array.from(oldBiosData), 
+        dataNew: Array.from(newBiosData) 
       });
       const bytes = new Uint8Array(result);
       setBuffer(bytes);
