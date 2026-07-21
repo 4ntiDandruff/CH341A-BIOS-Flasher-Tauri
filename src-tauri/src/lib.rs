@@ -215,6 +215,89 @@ fn open_backup(path: String) -> Result<Vec<u8>, String> {
 }
 
 #[tauri::command]
+fn inject_dmi(data_old: Vec<u8>, data_new: Vec<u8>) -> Result<Vec<u8>, String> {
+    if data_old.is_empty() || data_new.is_empty() {
+        return Err("File data cannot be empty".to_string());
+    }
+
+    let mut output_data = data_new.clone();
+    
+    // We search for DMI region signature or Win Key table "MSDM" to locate DMI Block
+    // In most modern laptops, DMI data sits in a 64KB block containing Serial / Windows Key
+    // Let's locate the Windows OEM activation key "MSDM" table first
+    let mut dmi_offset: Option<usize> = None;
+    if let Some(pos) = data_old.windows(4).position(|w| w == b"MSDM") {
+        // Block start is usually aligned to 0x1000 (4KB) boundaries
+        dmi_offset = Some((pos / 0x1000) * 0x1000);
+    }
+    
+    // Fallback: search for HP DMI signature block "NCB" or "DMI" string
+    if dmi_offset.is_none() {
+        if let Some(pos) = data_old.windows(3).position(|w| w == b"NCB" || w == b"DMI") {
+            dmi_offset = Some((pos / 0x1000) * 0x1000);
+        }
+    }
+
+    if let Some(offset) = dmi_offset {
+        // Safe check to ensure we don't exceed buffer lengths
+        let block_size = 0x10000; // 64KB DMI block size
+        if offset + block_size <= data_old.len() && offset + block_size <= output_data.len() {
+            // Overwrite the DMI block in clean bios with old bios data
+            output_data[offset..offset + block_size].copy_from_slice(&data_old[offset..offset + block_size]);
+            return Ok(output_data);
+        }
+    }
+
+    // Default Fallback: Try searching for individual Windows Key replacement
+    // If exact block transfer is risky, we directly search and replace the 29-byte MSDM key
+    if let Some(old_msdm_pos) = data_old.windows(4).position(|w| w == b"MSDM") {
+        if let Some(new_msdm_pos) = output_data.windows(4).position(|w| w == b"MSDM") {
+            let old_key_segment = &data_old[old_msdm_pos..std::cmp::min(data_old.len(), old_msdm_pos + 120)];
+            let new_key_segment = &output_data[new_msdm_pos..std::cmp::min(output_data.len(), new_msdm_pos + 120)];
+            
+            if let Ok(old_text) = String::from_utf8(old_key_segment.to_vec()) {
+                let re_key = Regex::new(r"[A-Z0-9]{5}-[A-Z0-9]{5}-[A-Z0-9]{5}-[A-Z0-9]{5}-[A-Z0-9]{5}").unwrap();
+                if let Some(old_mat) = re_key.find(&old_text) {
+                    let old_key_str = old_mat.as_str();
+                    
+                    // Replace key inside output buffer
+                    if let Ok(new_text) = String::from_utf8(new_key_segment.to_vec()) {
+                        if let Some(new_mat) = re_key.find(&new_text) {
+                            let start_replace = new_msdm_pos + new_mat.start();
+                            let end_replace = new_msdm_pos + new_mat.end();
+                            output_data[start_replace..end_replace].copy_from_slice(old_key_str.as_bytes());
+                            return Ok(output_data);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Err("Could not locate compatible DMI/MSDM block offsets to inject".to_string())
+}
+
+#[tauri::command]
+fn compare_bios_diff(data_a: Vec<u8>, data_b: Vec<u8>) -> Result<Vec<usize>, String> {
+    if data_a.len() != data_b.len() {
+        return Err("BIOS files must be of the same size to compare".to_string());
+    }
+
+    // Return list of offsets where bytes differ, limit to first 1000 matches to prevent memory bloat
+    let mut diff_offsets = Vec::new();
+    for i in 0..data_a.len() {
+        if data_a[i] != data_b[i] {
+            diff_offsets.push(i);
+            if diff_offsets.len() >= 1000 {
+                break;
+            }
+        }
+    }
+
+    Ok(diff_offsets)
+}
+
+#[tauri::command]
 fn extract_dmi_and_key(data: Vec<u8>) -> serde_json::Value {
     let mut win_key = "Not Found".to_string();
     let mut brand = "Unknown".to_string();
@@ -481,6 +564,8 @@ pub fn run() {
             verify_bios,
             erase_bios,
             get_chip_info,
+            inject_dmi,
+            compare_bios_diff,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

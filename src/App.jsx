@@ -8,6 +8,7 @@ const MENU_ITEMS = [
   { id: 2, icon: "📖", label: "Read", direct: false },
   { id: 3, icon: "💾", label: "Backup", direct: true },
   { id: 4, icon: "📂", label: "Open Backup", direct: true },
+  { id: 8, icon: "💉", label: "DMI Injector", direct: true },
   { id: 7, icon: "🗑️", label: "Erase", direct: false },
   { id: 5, icon: "✍️", label: "Write", direct: false },
   { id: 6, icon: "✅", label: "Verify", direct: false },
@@ -57,7 +58,7 @@ function playSound(type) {
   }
 }
 
-function formatHex(bytes, highlightOffset = -1, searchLen = 0) {
+function formatHex(bytes, highlightOffset = -1, searchLen = 0, diffOffsets = []) {
   if (!bytes || bytes.length === 0) return "No data loaded";
   const totalSize = bytes.length;
   const totalKB = (totalSize / 1024).toFixed(0);
@@ -80,6 +81,9 @@ function formatHex(bytes, highlightOffset = -1, searchLen = 0) {
   } else {
     lines.push(`✅ Chip has data | First data at 0x${firstDataOffset.toString(16).toUpperCase().padStart(8, "0")}`);
   }
+  if (diffOffsets.length > 0) {
+    lines.push(`🔴 Diff Mode Active: ${diffOffsets.length} byte differences detected (marked with *XX*)`);
+  }
   lines.push("");
   lines.push("Offset    00 01 02 03 04 05 06 07 08 09 0A 0B 0C 0D 0E 0F  |ASCII|");
   lines.push("─".repeat(79));
@@ -96,7 +100,7 @@ function formatHex(bytes, highlightOffset = -1, searchLen = 0) {
     lines.push("");
   }
 
-  const showBytes = 65536;
+  const showBytes = 32768; // Reduce display bytes for smoother diff rendering
   const endOffset = Math.min(totalSize, startOffset + showBytes);
 
   for (let i = startOffset; i < endOffset; i += 16) {
@@ -109,12 +113,18 @@ function formatHex(bytes, highlightOffset = -1, searchLen = 0) {
       if (idx < endOffset) {
         const b = bytes[idx];
         const hexStr = b.toString(16).toUpperCase().padStart(2, "0");
+        
         const isMatch = highlightOffset !== -1 && idx >= highlightOffset && idx < (highlightOffset + searchLen);
-        if (isMatch) {
+        const isDiff = diffOffsets.includes(idx);
+        
+        if (isDiff) {
+          hexParts.push(`*${hexStr}*`); // Star marker for differences
+        } else if (isMatch) {
           hexParts.push(`>${hexStr}<`);
         } else {
           hexParts.push(` ${hexStr} `);
         }
+        
         ascii += b >= 0x20 && b <= 0x7e ? String.fromCharCode(b) : ".";
       } else {
         hexParts.push("    ");
@@ -126,7 +136,7 @@ function formatHex(bytes, highlightOffset = -1, searchLen = 0) {
 
   if (endOffset < totalSize) {
     lines.push("");
-    lines.push(`... showing 64KB from offset 0x${startOffset.toString(16).toUpperCase()} of ${totalKB}KB total`);
+    lines.push(`... showing 32KB from offset 0x${startOffset.toString(16).toUpperCase()} of ${totalKB}KB total`);
   }
   return lines.join("\n");
 }
@@ -159,6 +169,16 @@ export default function App() {
   });
   
   const [copiedField, setCopiedField] = useState("");
+
+  // DMI Injector & Diff states
+  const [showInjector, setShowInjector] = useState(false);
+  const [oldBiosData, setOldBiosData] = useState(null);
+  const [oldBiosName, setOldBiosName] = useState("");
+  const [newBiosData, setNewBiosData] = useState(null);
+  const [newBiosName, setNewBiosName] = useState("");
+  
+  const [diffOffsets, setDiffOffsets] = useState([]);
+  const [comparisonTargetName, setComparisonTargetName] = useState("");
 
   const instantStageRef = useRef(null); 
   const logRef = useRef(null);
@@ -206,8 +226,8 @@ export default function App() {
   }, [appendLog]);
 
   useEffect(() => {
-    setHexText(buffer ? formatHex(buffer, searchResultIdx, searchLen) : "");
-  }, [buffer, searchResultIdx, searchLen]);
+    setHexText(buffer ? formatHex(buffer, searchResultIdx, searchLen, diffOffsets) : "");
+  }, [buffer, searchResultIdx, searchLen, diffOffsets]);
 
   useEffect(() => {
     if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
@@ -291,6 +311,7 @@ export default function App() {
     if (item?.direct) {
       if (menuId === 3) { await wrapAction(handleBackup); return; }
       if (menuId === 4) { await wrapAction(handleOpenBackup); return; }
+      if (menuId === 8) { setShowInjector(true); return; }
     }
   }
 
@@ -318,7 +339,7 @@ export default function App() {
       return;
     }
 
-    if (menuId === 3 || menuId === 4) {
+    if (menuId === 3 || menuId === 4 || menuId === 8) {
       await handleMenuClick(menuId);
       return;
     }
@@ -368,6 +389,8 @@ export default function App() {
     const bytes = new Uint8Array(data);
     setBuffer(bytes);
     setSearchResultIdx(-1);
+    setDiffOffsets([]);
+    setComparisonTargetName("");
     const duration = formatDuration(performance.now() - start);
     let nonFF = 0;
     for (let i = 0; i < bytes.length; i++) { if (bytes[i] !== 0xFF) nonFF++; }
@@ -407,6 +430,8 @@ export default function App() {
     setBuffer(bytes);
     setFileName(path);
     setSearchResultIdx(-1);
+    setDiffOffsets([]);
+    setComparisonTargetName("");
     let nonFF = 0;
     for (let i = 0; i < bytes.length; i++) { if (bytes[i] !== 0xFF) nonFF++; }
     const pctUsed = ((nonFF / bytes.length) * 100).toFixed(1);
@@ -415,6 +440,83 @@ export default function App() {
     playSound('success');
     await triggerDmiExtraction(bytes);
   }
+
+  // Load old BIOS for comparison (Diff Mode)
+  const handleLoadDiffTarget = async () => {
+    if (!buffer || buffer.length === 0) {
+      appendLog("⚠️ Load main BIOS buffer first!");
+      return;
+    }
+    const path = await open({
+      title: "Select BIOS File to Compare",
+      filters: [{ name: "Binary", extensions: ["bin", "rom"] }],
+      multiple: false,
+    });
+    if (!path) return;
+    try {
+      appendLog(`🔍 Comparing current buffer with ${path.split(/[/\\]/).pop()}...`);
+      const targetData = await invoke("open_backup", { path });
+      const offsets = await invoke("compare_bios_diff", { 
+        data_a: Array.from(buffer), 
+        data_b: targetData 
+      });
+      setDiffOffsets(offsets);
+      setComparisonTargetName(path.split(/[/\\]/).pop());
+      appendLog(`✅ Done. Found ${offsets.length} byte differences.`);
+      playSound('success');
+    } catch (e) {
+      appendLog(`❌ Comparison failed: ${e}`);
+      playSound('error');
+    }
+  };
+
+  // DMI Injector triggers
+  const handleSelectOldBios = async () => {
+    const path = await open({
+      title: "Select CUSTOMER Original BIOS (Old)",
+      filters: [{ name: "Binary", extensions: ["bin", "rom"] }],
+    });
+    if (!path) return;
+    const data = await invoke("open_backup", { path });
+    setOldBiosData(data);
+    setOldBiosName(path.split(/[/\\]/).pop());
+  };
+
+  const handleSelectNewBios = async () => {
+    const path = await open({
+      title: "Select CLEAN / WORKING BIOS (New)",
+      filters: [{ name: "Binary", extensions: ["bin", "rom"] }],
+    });
+    if (!path) return;
+    const data = await invoke("open_backup", { path });
+    setNewBiosData(data);
+    setNewBiosName(path.split(/[/\\]/).pop());
+  };
+
+  const handleRunInjection = async () => {
+    if (!oldBiosData || !newBiosData) return;
+    try {
+      appendLog("💉 Injecting original DMI data into Clean BIOS...");
+      const result = await invoke("inject_dmi", { 
+        data_old: oldBiosData, 
+        data_new: newBiosData 
+      });
+      const bytes = new Uint8Array(result);
+      setBuffer(bytes);
+      setFileName("merged_ready_to_flash.bin");
+      setSearchResultIdx(-1);
+      setDiffOffsets([]);
+      setComparisonTargetName("");
+      appendLog("✅ DMI Injection completed successfully! Loaded merged data to main buffer.");
+      setShowInjector(false);
+      playSound('success');
+      await triggerDmiExtraction(bytes);
+    } catch (e) {
+      appendLog(`❌ DMI Injection failed: ${e}`);
+      playSound('error');
+      await message(`Gagal menyuntikkan DMI!\nDetail: ${e}`, { title: "DMI Error", type: "error" });
+    }
+  };
 
   async function handleWrite() {
     if (!chip) { appendLog("⚠️ Detect chip first!"); return; }
@@ -566,7 +668,7 @@ export default function App() {
                 onChange={(e) => setInstantMode(e.target.checked)}
                 disabled={isProcessing}
               />
-              <label htmlFor="instant-mode" className="text-xs font-semibold cursor-pointer select-none">
+              <label htmlFor="instant-mode" className="text-xs font-semibold c‍ursor-pointer select-none">
                 ⚡ Instant Mode (Erase → Write → Verify)
               </label>
             </div>
@@ -610,17 +712,17 @@ export default function App() {
             <button className="btn btn-primary btn-sm px-4" onClick={handleSearch}>
               🔍 Find
             </button>
-            {searchResultIdx !== -1 && (
-              <button 
-                className="btn btn-ghost btn-sm text-[10px] opacity-50 px-1"
-                onClick={() => setSearchResultIdx(-1)}
-              >
-                ✕ clear
-              </button>
-            )}
+            <button 
+              className={`btn btn-sm px-3 ${diffOffsets.length > 0 ? "btn-success" : "btn-outline btn-accent"}`}
+              onClick={diffOffsets.length > 0 ? () => setDiffOffsets([]) : handleLoadDiffTarget}
+              title="Compare current buffer with another bios file"
+              disabled={!buffer}
+            >
+              📊 {diffOffsets.length > 0 ? "Reset Diff" : "Compare (Diff)"}
+            </button>
           </div>
 
-          {/* Smart Card DMI & Info (Opsi 1 - Moved to Right Pane Top for spacious layout) */}
+          {/* Smart Card DMI & Info */}
           <div className="p-3 bg-base-300/40 border-b border-base-content/10 text-xs grid grid-cols-2 gap-3.5">
             {/* Column 1: Device Model & Serial */}
             <div className="space-y-2">
@@ -655,9 +757,14 @@ export default function App() {
               </div>
             </div>
 
-            {/* Column 2: Windows Key & Special Brand DMI (Dell Tag / HP BID) */}
+            {/* Column 2: Windows Key & Special Brand DMI */}
             <div className="space-y-2">
-              <div className="font-semibold opacity-60 uppercase tracking-wider text-[10px]">🔑 Security & Specs</div>
+              <div className="font-semibold opacity-60 uppercase tracking-wider text-[10px] flex justify-between items-center">
+                <span>🔑 Security & Specs</span>
+                {comparisonTargetName && (
+                  <span className="text-[9px] text-success tracking-tight">vs {comparisonTargetName}</span>
+                )}
+              </div>
               
               <div className="flex justify-between items-center border-b border-base-content/5 pb-1">
                 <span className="opacity-70">🔑 Windows Key:</span>
@@ -678,7 +785,7 @@ export default function App() {
               {/* HP Specific: Board ID */}
               {dmiInfo.brand === "HP" && dmiInfo.board_id !== "Not Found" && (
                 <div className="flex justify-between items-center border-b border-base-content/5 pb-1">
-                  <span className="opacity-70 text-warning font-semibold">⚙️ Board ID (BID):</span>
+                  <span className="opacity-70 text-warning font-semibold">⚙️ HP Board ID (BID):</span>
                   <div className="flex items-center gap-1.5">
                     <span className="font-mono font-bold text-warning select-text">{dmiInfo.board_id}</span>
                     <button 
@@ -709,7 +816,6 @@ export default function App() {
                 </div>
               )}
 
-              {/* Default Fallback info so layout remains balanced */}
               {dmiInfo.brand !== "HP" && dmiInfo.brand !== "Dell" && (
                 <div className="flex justify-between items-center border-b border-base-content/5 pb-1">
                   <span className="opacity-70">🏷️ Tag/BID Status:</span>
@@ -747,6 +853,59 @@ export default function App() {
           {isProcessing ? "Processing..." : instantMode ? "⚡ Run Instant Mode" : `▶ Apply: ${MENU_ITEMS.find(m => m.id === activeMenu)?.label}`}
         </button>
       </div>
+
+      {/* DMI Injector Modal */}
+      {showInjector && (
+        <div className="modal modal-open">
+          <div className="modal-box relative border border-base-content/10 bg-base-200 max-w-md">
+            <button 
+              className="btn btn-sm btn-circle absolute right-2 top-2"
+              onClick={() => setShowInjector(false)}
+            >✕</button>
+            <h3 className="text-md font-bold flex items-center gap-2 text-primary">
+              💉 DMI Injector & Identity Merger
+            </h3>
+            <p className="text-[10px] opacity-60 mt-1">Suntik data Serial / License asli dari BIOS rusak ke Clean BIOS.</p>
+            
+            <div className="py-4 space-y-4">
+              {/* Box 1: Old Bios Input */}
+              <div className="p-3 bg-base-300 rounded-lg space-y-2">
+                <span className="text-xs font-semibold block">1. BIOS Lama (Unit Pelanggan)</span>
+                <div className="flex gap-2">
+                  <button className="btn btn-sm btn-outline btn-wide flex-1" onClick={handleSelectOldBios}>
+                    {oldBiosName ? "📁 Change File" : "📂 Choose BIOS Lama"}
+                  </button>
+                </div>
+                {oldBiosName && <span className="text-[10px] text-success block truncate">Selected: {oldBiosName}</span>}
+              </div>
+
+              {/* Box 2: New Bios Input */}
+              <div className="p-3 bg-base-300 rounded-lg space-y-2">
+                <span className="text-xs font-semibold block">2. BIOS Baru (Clean/Tested BIOS)</span>
+                <div className="flex gap-2">
+                  <button className="btn btn-sm btn-outline btn-wide flex-1" onClick={handleSelectNewBios}>
+                    {newBiosName ? "📁 Change File" : "📂 Choose BIOS Baru"}
+                  </button>
+                </div>
+                {newBiosName && <span className="text-[10px] text-success block truncate">Selected: {newBiosName}</span>}
+              </div>
+            </div>
+
+            <div className="modal-action">
+              <button className="btn btn-ghost btn-sm" onClick={() => setShowInjector(false)}>
+                Cancel
+              </button>
+              <button 
+                className="btn btn-primary btn-sm px-6" 
+                onClick={handleRunInjection}
+                disabled={!oldBiosData || !newBiosData}
+              >
+                ⚙️ Inject & Load Buffer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* About Modal */}
       {showAbout && (
