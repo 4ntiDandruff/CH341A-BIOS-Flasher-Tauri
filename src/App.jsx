@@ -553,93 +553,6 @@ export default function App() {
                 </li>
               ))}
             </ul>
-
-            {/* Smart Card DMI & Info (Opsi 1 + Clipboard copy) */}
-            <div className="mx-4 my-2 p-3 bg-base-300/60 border border-base-content/10 rounded-lg text-xs space-y-2">
-              <div className="font-semibold opacity-60 uppercase tracking-wider text-[10px] flex justify-between items-center">
-                <span>📟 Detected Device Identity</span>
-                {dmiInfo.brand !== "Unknown" && (
-                  <span className="badge badge-accent badge-outline text-[9px] scale-95 font-bold uppercase">{dmiInfo.brand}</span>
-                )}
-              </div>
-
-              {/* Dynamic Brand & Model */}
-              <div className="flex justify-between border-b border-base-content/5 py-1">
-                <span className="opacity-70">💻 Device Model:</span>
-                <span className="font-bold text-base-content select-text">
-                  {dmiInfo.brand !== "Unknown" ? `${dmiInfo.brand} ${dmiInfo.model}` : "Unknown"}
-                </span>
-              </div>
-
-              {/* Windows Key (Always shown) */}
-              <div className="flex justify-between items-center border-b border-base-content/5 py-1">
-                <span className="opacity-70">🔑 Windows Key:</span>
-                <div className="flex items-center gap-1.5">
-                  <span className="font-mono font-bold text-primary select-text">{dmiInfo.windows_key}</span>
-                  {dmiInfo.windows_key !== "Not Found" && (
-                    <button 
-                      className={`btn btn-xs btn-ghost p-1 ${copiedField === "winKey" ? "text-success" : "opacity-50 hover:opacity-100"}`} 
-                      onClick={() => copyToClipboard(dmiInfo.windows_key, "winKey")}
-                      title="Copy to clipboard"
-                    >
-                      {copiedField === "winKey" ? "✓" : "📋"}
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              {/* Serial Number (Always shown) */}
-              <div className="flex justify-between items-center border-b border-base-content/5 py-1">
-                <span className="opacity-70">📋 Serial Number:</span>
-                <div className="flex items-center gap-1.5">
-                  <span className="font-mono font-semibold select-text">{dmiInfo.serial_number}</span>
-                  {dmiInfo.serial_number !== "Not Found" && (
-                    <button 
-                      className={`btn btn-xs btn-ghost p-1 ${copiedField === "sn" ? "text-success" : "opacity-50 hover:opacity-100"}`} 
-                      onClick={() => copyToClipboard(dmiInfo.serial_number, "sn")}
-                      title="Copy to clipboard"
-                    >
-                      {copiedField === "sn" ? "✓" : "📋"}
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              {/* HP Specific: Board ID */}
-              {dmiInfo.brand === "HP" && dmiInfo.board_id !== "Not Found" && (
-                <div className="flex justify-between items-center border-b border-base-content/5 py-1">
-                  <span className="opacity-70 text-warning font-semibold">⚙️ Board ID (BID):</span>
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-mono font-bold text-warning select-text">{dmiInfo.board_id}</span>
-                    <button 
-                      className={`btn btn-xs btn-ghost p-1 ${copiedField === "bid" ? "text-success" : "opacity-50 hover:opacity-100"}`} 
-                      onClick={() => copyToClipboard(dmiInfo.board_id, "bid")}
-                      title="Copy to clipboard"
-                    >
-                      {copiedField === "bid" ? "✓" : "📋"}
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Dell Specific: Service Tag */}
-              {dmiInfo.brand === "Dell" && dmiInfo.service_tag !== "Not Found" && (
-                <div className="flex justify-between items-center border-b border-base-content/5 py-1">
-                  <span className="opacity-70 text-info font-semibold">🏷️ Dell Service Tag:</span>
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-mono font-bold text-info select-text">{dmiInfo.service_tag}</span>
-                    <button 
-                      className={`btn btn-xs btn-ghost p-1 ${copiedField === "svctag" ? "text-success" : "opacity-50 hover:opacity-100"}`} 
-                      onClick={() => copyToClipboard(dmiInfo.service_tag, "svctag")}
-                      title="Copy to clipboard"
-                    >
-                      {copiedField === "svctag" ? "✓" : "📋"}
-                    </button>
-                  </div>
-                </div>
-              )}
-
-            </div>
           </div>
 
           <div className="flex flex-col">
@@ -653,7 +566,7 @@ export default function App() {
                 onChange={(e) => setInstantMode(e.target.checked)}
                 disabled={isProcessing}
               />
-              <label htmlFor="instant-mode" className="text-xs font-semibold c‍ursor-pointer select-none">
+              <label htmlFor="instant-mode" className="text-xs font-semibold cursor-pointer select-none">
                 ⚡ Instant Mode (Erase → Write → Verify)
               </label>
             </div>
@@ -705,6 +618,105 @@ export default function App() {
                 ✕ clear
               </button>
             )}
+          </div>
+
+          {/* Smart Card DMI & Info (Opsi 1 - Moved to Right Pane Top for spacious layout) */}
+          <div className="p-3 bg-base-300/40 border-b border-base-content/10 text-xs grid grid-cols-2 gap-3.5">
+            {/* Column 1: Device Model & Serial */}
+            <div className="space-y-2">
+              <div className="font-semibold opacity-60 uppercase tracking-wider text-[10px] flex items-center gap-2">
+                <span>📟 Device Identity</span>
+                {dmiInfo.brand !== "Unknown" && (
+                  <span className="badge badge-accent badge-outline text-[9px] scale-95 font-bold uppercase">{dmiInfo.brand}</span>
+                )}
+              </div>
+              
+              <div className="flex justify-between border-b border-base-content/5 pb-1.5 pt-0.5">
+                <span className="opacity-70">💻 Model:</span>
+                <span className="font-bold text-base-content select-text">
+                  {dmiInfo.brand !== "Unknown" ? `${dmiInfo.brand} ${dmiInfo.model}` : "Unknown"}
+                </span>
+              </div>
+              
+              <div className="flex justify-between items-center border-b border-base-content/5 pb-1">
+                <span className="opacity-70">📋 Serial Number:</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="font-mono font-semibold select-text">{dmiInfo.serial_number}</span>
+                  {dmiInfo.serial_number !== "Not Found" && (
+                    <button 
+                      className={`btn btn-xs btn-ghost p-1 ${copiedField === "sn" ? "text-success" : "opacity-50 hover:opacity-100"}`} 
+                      onClick={() => copyToClipboard(dmiInfo.serial_number, "sn")}
+                      title="Copy to clipboard"
+                    >
+                      {copiedField === "sn" ? "✓" : "📋"}
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Column 2: Windows Key & Special Brand DMI (Dell Tag / HP BID) */}
+            <div className="space-y-2">
+              <div className="font-semibold opacity-60 uppercase tracking-wider text-[10px]">🔑 Security & Specs</div>
+              
+              <div className="flex justify-between items-center border-b border-base-content/5 pb-1">
+                <span className="opacity-70">🔑 Windows Key:</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="font-mono font-bold text-primary select-text">{dmiInfo.windows_key}</span>
+                  {dmiInfo.windows_key !== "Not Found" && (
+                    <button 
+                      className={`btn btn-xs btn-ghost p-1 ${copiedField === "winKey" ? "text-success" : "opacity-50 hover:opacity-100"}`} 
+                      onClick={() => copyToClipboard(dmiInfo.windows_key, "winKey")}
+                      title="Copy to clipboard"
+                    >
+                      {copiedField === "winKey" ? "✓" : "📋"}
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* HP Specific: Board ID */}
+              {dmiInfo.brand === "HP" && dmiInfo.board_id !== "Not Found" && (
+                <div className="flex justify-between items-center border-b border-base-content/5 pb-1">
+                  <span className="opacity-70 text-warning font-semibold">⚙️ Board ID (BID):</span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-mono font-bold text-warning select-text">{dmiInfo.board_id}</span>
+                    <button 
+                      className={`btn btn-xs btn-ghost p-1 ${copiedField === "bid" ? "text-success" : "opacity-50 hover:opacity-100"}`} 
+                      onClick={() => copyToClipboard(dmiInfo.board_id, "bid")}
+                      title="Copy to clipboard"
+                    >
+                      {copiedField === "bid" ? "✓" : "📋"}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Dell Specific: Service Tag */}
+              {dmiInfo.brand === "Dell" && dmiInfo.service_tag !== "Not Found" && (
+                <div className="flex justify-between items-center border-b border-base-content/5 pb-1">
+                  <span className="opacity-70 text-info font-semibold">🏷️ Dell Service Tag:</span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-mono font-bold text-info select-text">{dmiInfo.service_tag}</span>
+                    <button 
+                      className={`btn btn-xs btn-ghost p-1 ${copiedField === "svctag" ? "text-success" : "opacity-50 hover:opacity-100"}`} 
+                      onClick={() => copyToClipboard(dmiInfo.service_tag, "svctag")}
+                      title="Copy to clipboard"
+                    >
+                      {copiedField === "svctag" ? "✓" : "📋"}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Default Fallback info so layout remains balanced */}
+              {dmiInfo.brand !== "HP" && dmiInfo.brand !== "Dell" && (
+                <div className="flex justify-between items-center border-b border-base-content/5 pb-1">
+                  <span className="opacity-70">🏷️ Tag/BID Status:</span>
+                  <span className="opacity-40 italic">Not Required</span>
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="flex-1 overflow-auto p-2">
