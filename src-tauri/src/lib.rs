@@ -764,3 +764,63 @@ pub fn run() {
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
+
+
+#[cfg(test)]
+mod compare_tests {
+    use super::*;
+
+    #[test]
+    fn identical_files() {
+        let a = vec![0u8; 1024];
+        let b = vec![0u8; 1024];
+        let r = compare_bios_diff(a, b).unwrap();
+        assert!(r.identical);
+        assert!(r.size_match);
+        assert_eq!(r.diff_count, 0);
+        assert!(r.message.contains("IDENTIK"));
+        assert_eq!(r.hash_a, r.hash_b);
+    }
+
+    #[test]
+    fn different_one_byte() {
+        let a = vec![0u8; 256];
+        let mut b = vec![0u8; 256];
+        b[100] = 0xFF;
+        let r = compare_bios_diff(a, b).unwrap();
+        assert!(!r.identical);
+        assert!(r.size_match);
+        assert_eq!(r.diff_count, 1);
+        assert_eq!(r.first_offset, Some(100));
+        assert_eq!(r.diff_offsets, vec![100]);
+        assert!(r.message.contains("BEDA"));
+    }
+
+    #[test]
+    fn size_mismatch() {
+        let a = vec![1u8; 100];
+        let b = vec![1u8; 200];
+        let r = compare_bios_diff(a, b).unwrap();
+        assert!(!r.identical);
+        assert!(!r.size_match);
+        assert!(r.message.contains("Size beda"));
+        assert!(r.diff_offsets.is_empty());
+    }
+
+    #[test]
+    fn empty_errors() {
+        let r = compare_bios_diff(vec![], vec![1, 2, 3]);
+        assert!(r.is_err());
+    }
+
+    #[test]
+    fn sample_cap() {
+        let a = vec![0u8; 5000];
+        let b = vec![1u8; 5000];
+        let r = compare_bios_diff(a, b).unwrap();
+        assert_eq!(r.diff_count, 5000);
+        assert_eq!(r.diff_offsets.len(), 1000);
+        assert!(r.sample_capped);
+        assert_eq!(r.first_offset, Some(0));
+    }
+}

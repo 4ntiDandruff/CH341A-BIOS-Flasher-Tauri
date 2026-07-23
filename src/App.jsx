@@ -645,28 +645,36 @@ ${diagnosticError.context || "No raw context"}
 
       setComparisonTargetName(nameB);
 
-      if (!result.size_match) {
+      // Defensive: accept snake_case (serde default) or camelCase (if renamed)
+      const sizeMatch = result.size_match ?? result.sizeMatch;
+      const identical = result.identical;
+      const msg = result.message || "";
+      const offsets = result.diff_offsets || result.diffOffsets || [];
+      const firstOff = result.first_offset ?? result.firstOffset;
+      const diffCount = result.diff_count ?? result.diffCount ?? offsets.length;
+
+      if (sizeMatch === false) {
         setDiffOffsets([]);
-        appendLog(`❌ ${result.message}`);
+        appendLog(`❌ ${msg}`);
         try {
-          await message(result.message, { title: "Size beda", kind: "error" });
+          await message(msg, { title: "Size beda", kind: "error" });
         } catch (_) {}
         playSound("error");
         return;
       }
 
-      if (result.identical) {
+      if (identical === true || diffCount === 0) {
         setDiffOffsets([]);
-        appendLog(`✅ ${result.message}`);
+        appendLog(`✅ ${msg || "IDENTIK"}`);
         playSound("success");
         return;
       }
 
       // BEDA: mark sample offsets in hex viewer
-      setDiffOffsets(result.diff_offsets || []);
-      appendLog(`❌ ${result.message}`);
-      if (result.first_offset != null) {
-        const off = Number(result.first_offset).toString(16).toUpperCase().padStart(8, "0");
+      setDiffOffsets(Array.isArray(offsets) ? offsets : []);
+      appendLog(`❌ ${msg}`);
+      if (firstOff != null && firstOff !== undefined) {
+        const off = Number(firstOff).toString(16).toUpperCase().padStart(8, "0");
         appendLog(`📌 Cek hex di sekitar offset 0x${off}`);
       }
       playSound("error");
