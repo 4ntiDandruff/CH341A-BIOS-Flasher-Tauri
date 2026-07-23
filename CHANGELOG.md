@@ -2,6 +2,16 @@
 
 Semua catatan perubahan penting pada proyek **BIOS Flasher** milik Megapass Sidoarjo akan dicatat di file ini secara berkala.
 
+## [2.1.4] - 2026-07-23
+### Changed
+- **Compare (Diff) polish (MVP):**
+  * Laporan ringkas **IDENTIK / BEDA** + MD5 kedua file
+  * Jumlah byte beda + persen + offset pertama
+  * Pesan jelas jika buffer kosong (Load BIOS dulu)
+  * Pesan jelas jika **size file beda** (MB vs MB)
+  * Hex marker `*XX*` tetap (sample max 1000 offset)
+  * Fast-path: hash sama -> langsung IDENTIK tanpa scan penuh
+
 ## [2.1.3] - 2026-07-23
 ### Added
 - **Pre-flight Gate:** Validasi wajib sebelum Write / Erase / Instant Mode:

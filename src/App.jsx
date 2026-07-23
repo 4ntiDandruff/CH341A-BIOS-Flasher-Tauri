@@ -14,9 +14,17 @@ const MENU_ITEMS = [
   { id: 8, icon: "💉", label: "DMI Injector", direct: true },
 ];
 
-const APP_VERSION = "2.1.3";
+const APP_VERSION = "2.1.4";
 
 const INDO_CHANGELOG = [
+  {
+    version: "v2.1.4",
+    date: "2026-07-23",
+    items: [
+      "Compare (Diff) poles: laporan IDENTIK/BEDA + MD5 + jumlah byte beda + offset pertama.",
+      "Pesan jelas jika buffer kosong atau size file beda; hex *XX* tetap untuk detail."
+    ]
+  },
   {
     version: "v2.1.3",
     date: "2026-07-23",
@@ -610,32 +618,61 @@ ${diagnosticError.context || "No raw context"}
     await triggerDmiExtraction(bytes);
   }
 
-  // Load old BIOS for comparison (Diff Mode)
+  // Compare (Diff): buffer A vs file B - ringkas IDENTIK/BEDA + hex markers
   const handleLoadDiffTarget = async () => {
     if (!buffer || buffer.length === 0) {
-      appendLog("⚠️ Load main BIOS buffer first!");
+      const msg = "Load BIOS dulu (Read chip atau Open Backup) sebelum Compare.";
+      appendLog("⚠️ " + msg);
+      try {
+        await message(msg, { title: "Compare (Diff)", kind: "warning" });
+      } catch (_) {}
       return;
     }
     const path = await open({
-      title: "Select BIOS File to Compare",
+      title: "Pilih file .bin untuk dibandingkan dengan buffer",
       filters: [{ name: "Binary", extensions: ["bin", "rom"] }],
       multiple: false,
     });
     if (!path) return;
     try {
-      appendLog(`🔍 Comparing current buffer with ${path.split(/[/\\]/).pop()}...`);
+      const nameB = path.split(/[/\\]/).pop();
+      appendLog(`🔍 Compare: buffer (${(buffer.length / 1024).toFixed(0)}KB) vs ${nameB}...`);
       const targetData = await invoke("open_backup", { path });
-      const offsets = await invoke("compare_bios_diff", { 
-        dataA: Array.from(buffer), 
-        dataB: Array.from(targetData) 
+      const result = await invoke("compare_bios_diff", {
+        dataA: Array.from(buffer),
+        dataB: Array.from(targetData),
       });
-      setDiffOffsets(offsets);
-      setComparisonTargetName(path.split(/[/\\]/).pop());
-      appendLog(`✅ Done. Found ${offsets.length} byte differences.`);
-      playSound('success');
+
+      setComparisonTargetName(nameB);
+
+      if (!result.size_match) {
+        setDiffOffsets([]);
+        appendLog(`❌ ${result.message}`);
+        try {
+          await message(result.message, { title: "Size beda", kind: "error" });
+        } catch (_) {}
+        playSound("error");
+        return;
+      }
+
+      if (result.identical) {
+        setDiffOffsets([]);
+        appendLog(`✅ ${result.message}`);
+        playSound("success");
+        return;
+      }
+
+      // BEDA: mark sample offsets in hex viewer
+      setDiffOffsets(result.diff_offsets || []);
+      appendLog(`❌ ${result.message}`);
+      if (result.first_offset != null) {
+        const off = Number(result.first_offset).toString(16).toUpperCase().padStart(8, "0");
+        appendLog(`📌 Cek hex di sekitar offset 0x${off}`);
+      }
+      playSound("error");
     } catch (e) {
-      appendLog(`❌ Comparison failed: ${e}`);
-      playSound('error');
+      appendLog(`❌ Comparison failed: ${e.message || e}`);
+      playSound("error");
     }
   };
 
@@ -938,9 +975,8 @@ ${diagnosticError.context || "No raw context"}
             </button>
             <button 
               className={`btn btn-sm px-3 ${diffOffsets.length > 0 ? "btn-success" : "btn-outline btn-accent"}`}
-              onClick={diffOffsets.length > 0 ? () => setDiffOffsets([]) : handleLoadDiffTarget}
-              title="Compare current buffer with another bios file"
-              disabled={!buffer}
+              onClick={diffOffsets.length > 0 ? () => { setDiffOffsets([]); setComparisonTargetName(""); appendLog("Diff di-reset."); } : handleLoadDiffTarget}
+              title={!buffer ? "Load BIOS dulu (Read / Open Backup)" : (diffOffsets.length > 0 ? "Reset tanda beda di hex" : "Bandingkan buffer dengan file .bin lain")}
             >
               📊 {diffOffsets.length > 0 ? "Reset Diff" : "Compare (Diff)"}
             </button>
@@ -1223,7 +1259,7 @@ ${diagnosticError.context || "No raw context"}
             <h3 className="text-lg font-bold flex items-center gap-2">
               🔧 Megapass Service HP & Laptop Sidoarjo
             </h3>
-            <p className="text-xs opacity-60 mt-1">Version 2.1.3 (Tauri Professional Edition)</p>
+            <p className="text-xs opacity-60 mt-1">Version 2.1.4 (Tauri Professional Edition)</p>
             
             <div className="my-6 flex flex-col items-center justify-center py-6 border border-dashed border-base-content/20 rounded-lg bg-base-300">
               <div className="w-24 h-24 rounded-xl bg-primary/10 flex items-center justify-center border border-primary/20 text-primary font-bold text-center text-xs p-2 select-none">

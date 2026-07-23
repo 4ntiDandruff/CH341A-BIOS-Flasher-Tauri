@@ -293,24 +293,135 @@ fn inject_dmi(data_old: Vec<u8>, data_new: Vec<u8>) -> Result<Vec<u8>, Diagnosti
     ))
 }
 
+#[derive(Serialize, Deserialize, Clone)]
+struct CompareResult {
+    identical: bool,
+    size_match: bool,
+    size_a: usize,
+    size_b: usize,
+    hash_a: String,
+    hash_b: String,
+    diff_count: usize,
+    /// First differing offsets (capped) for hex markers
+    diff_offsets: Vec<usize>,
+    first_offset: Option<usize>,
+    sample_capped: bool,
+    message: String,
+}
+
+fn md5_hex(data: &[u8]) -> String {
+    let mut hasher = Md5::new();
+    hasher.update(data);
+    format!("{:x}", hasher.finalize())
+}
+
 #[tauri::command]
-fn compare_bios_diff(data_a: Vec<u8>, data_b: Vec<u8>) -> Result<Vec<usize>, String> {
-    if data_a.len() != data_b.len() {
-        return Err("BIOS files must be of the same size to compare".to_string());
+fn compare_bios_diff(data_a: Vec<u8>, data_b: Vec<u8>) -> Result<CompareResult, String> {
+    let size_a = data_a.len();
+    let size_b = data_b.len();
+    let hash_a = md5_hex(&data_a);
+    let hash_b = md5_hex(&data_b);
+
+    if size_a == 0 || size_b == 0 {
+        return Err("Salah satu file kosong - pilih file .bin yang valid".to_string());
     }
 
-    let mut diff_offsets = Vec::new();
-    for i in 0..data_a.len() {
+    if size_a != size_b {
+        let msg = format!(
+            "Size beda: {:.2}MB vs {:.2}MB - tidak bisa dibanding byte-per-byte. Pakai dump full size yang sama.",
+            size_a as f64 / 1048576.0,
+            size_b as f64 / 1048576.0
+        );
+        return Ok(CompareResult {
+            identical: false,
+            size_match: false,
+            size_a,
+            size_b,
+            hash_a,
+            hash_b,
+            diff_count: 0,
+            diff_offsets: vec![],
+            first_offset: None,
+            sample_capped: false,
+            message: msg,
+        });
+    }
+
+    // Fast path: same hash => identical
+    if hash_a == hash_b {
+        return Ok(CompareResult {
+            identical: true,
+            size_match: true,
+            size_a,
+            size_b,
+            hash_a: hash_a.clone(),
+            hash_b: hash_b.clone(),
+            diff_count: 0,
+            diff_offsets: vec![],
+            first_offset: None,
+            sample_capped: false,
+            message: format!(
+                "IDENTIK - {} bytes ({:.2}MB), MD5 {}",
+                size_a,
+                size_a as f64 / 1048576.0,
+                hash_a
+            ),
+        });
+    }
+
+    let mut diff_offsets: Vec<usize> = Vec::new();
+    let mut diff_count: usize = 0;
+    let mut first_offset: Option<usize> = None;
+    const SAMPLE_CAP: usize = 1000;
+
+    for i in 0..size_a {
         if data_a[i] != data_b[i] {
-            diff_offsets.push(i);
-            if diff_offsets.len() >= 1000 {
-                break;
+            if first_offset.is_none() {
+                first_offset = Some(i);
+            }
+            diff_count += 1;
+            if diff_offsets.len() < SAMPLE_CAP {
+                diff_offsets.push(i);
             }
         }
     }
 
-    Ok(diff_offsets)
+    let sample_capped = diff_count > SAMPLE_CAP;
+    let pct = (diff_count as f64 / size_a as f64) * 100.0;
+    let first_txt = first_offset
+        .map(|o| format!("0x{:08X}", o))
+        .unwrap_or_else(|| "-".to_string());
+
+    let msg = format!(
+        "BEDA - {} byte beda ({:.4}%) | size {:.2}MB | offset pertama {} | MD5 A {} | MD5 B {}{}",
+        diff_count,
+        pct,
+        size_a as f64 / 1048576.0,
+        first_txt,
+        hash_a,
+        hash_b,
+        if sample_capped {
+            format!(" | hex menandai {} offset pertama", SAMPLE_CAP)
+        } else {
+            String::new()
+        }
+    );
+
+    Ok(CompareResult {
+        identical: false,
+        size_match: true,
+        size_a,
+        size_b,
+        hash_a,
+        hash_b,
+        diff_count,
+        diff_offsets,
+        first_offset,
+        sample_capped,
+        message: msg,
+    })
 }
+
 
 #[tauri::command]
 fn analyze_me_region(data: Vec<u8>) -> serde_json::Value {
