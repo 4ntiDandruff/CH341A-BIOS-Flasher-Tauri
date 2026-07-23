@@ -7,16 +7,23 @@ const MENU_ITEMS = [
   { id: 1, icon: "🔍", label: "Detect Chip", direct: true },
   { id: 2, icon: "📖", label: "Read", direct: false },
   { id: 3, icon: "💾", label: "Backup", direct: true },
-  { id: 4, icon: "📂", label: "Open Backup", direct: true },
+  { id: 4, icon: "📂", label: "Load File", direct: true },
   { id: 7, icon: "🗑️", label: "Erase", direct: false },
   { id: 5, icon: "✍️", label: "Write", direct: false },
   { id: 6, icon: "✅", label: "Verify", direct: false },
   { id: 8, icon: "💉", label: "DMI Injector", direct: true },
 ];
 
-const APP_VERSION = "2.1.4";
+const APP_VERSION = "2.1.5";
 
 const INDO_CHANGELOG = [
+  {
+    version: "v2.1.5",
+    date: "2026-07-23",
+    items: [
+      "Rename menu Open Backup menjadi Load File agar lebih jelas."
+    ]
+  },
   {
     version: "v2.1.4",
     date: "2026-07-23",
@@ -257,7 +264,7 @@ export default function App() {
     if (!usbConnected) blockers.push("CH341A tidak terdeteksi di USB (pulse merah)");
     if (!chip) blockers.push("Chip belum di-Detect");
     if (needBuffer && (!buffer || buffer.length === 0)) {
-      blockers.push("Buffer kosong - Read chip atau Open Backup dulu");
+      blockers.push("Buffer kosong - Read chip atau Load File dulu");
     }
 
     if (blockers.length > 0) {
@@ -596,11 +603,11 @@ ${diagnosticError.context || "No raw context"}
 
   async function handleOpenBackup() {
     const path = await open({
-      title: "Open BIOS Backup File",
+      title: "Load File BIOS (.bin)",
       filters: [{ name: "Binary", extensions: ["bin", "rom"] }],
       multiple: false,
     });
-    if (!path) { appendLog("Open cancelled."); return; }
+    if (!path) { appendLog("Load File dibatalkan."); return; }
     appendLog(`📂 Loading ${path}...`);
     const data = await invoke("open_backup", { path });
     const bytes = new Uint8Array(data);
@@ -621,7 +628,7 @@ ${diagnosticError.context || "No raw context"}
   // Compare (Diff): buffer A vs file B - ringkas IDENTIK/BEDA + hex markers
   const handleLoadDiffTarget = async () => {
     if (!buffer || buffer.length === 0) {
-      const msg = "Load BIOS dulu (Read chip atau Open Backup) sebelum Compare.";
+      const msg = "Load file dulu (Read chip atau Load File) sebelum Compare.";
       appendLog("⚠️ " + msg);
       try {
         await message(msg, { title: "Compare (Diff)", kind: "warning" });
@@ -984,7 +991,7 @@ ${diagnosticError.context || "No raw context"}
             <button 
               className={`btn btn-sm px-3 ${diffOffsets.length > 0 ? "btn-success" : "btn-outline btn-accent"}`}
               onClick={diffOffsets.length > 0 ? () => { setDiffOffsets([]); setComparisonTargetName(""); appendLog("Diff di-reset."); } : handleLoadDiffTarget}
-              title={!buffer ? "Load BIOS dulu (Read / Open Backup)" : (diffOffsets.length > 0 ? "Reset tanda beda di hex" : "Bandingkan buffer dengan file .bin lain")}
+              title={!buffer ? "Load file dulu (Read / Load File)" : (diffOffsets.length > 0 ? "Reset tanda beda di hex" : "Bandingkan buffer dengan file .bin lain")}
             >
               📊 {diffOffsets.length > 0 ? "Reset Diff" : "Compare (Diff)"}
             </button>
@@ -1108,7 +1115,7 @@ ${diagnosticError.context || "No raw context"}
 
           <div className="flex-1 overflow-auto p-2">
             <pre className="hex-viewer w-full h-full p-3 rounded-lg overflow-auto font-mono text-xs select-text">
-              {hexText || "No data loaded.\n\nDetect a chip and Read, or Open a backup file."}
+              {hexText || "No data loaded.\n\nDetect + Read chip, atau Load File (.bin)."}
             </pre>
           </div>
           <div
@@ -1267,7 +1274,7 @@ ${diagnosticError.context || "No raw context"}
             <h3 className="text-lg font-bold flex items-center gap-2">
               🔧 Megapass Service HP & Laptop Sidoarjo
             </h3>
-            <p className="text-xs opacity-60 mt-1">Version 2.1.4 (Tauri Professional Edition)</p>
+            <p className="text-xs opacity-60 mt-1">Version 2.1.5 (Tauri Professional Edition)</p>
             
             <div className="my-6 flex flex-col items-center justify-center py-6 border border-dashed border-base-content/20 rounded-lg bg-base-300">
               <div className="w-24 h-24 rounded-xl bg-primary/10 flex items-center justify-center border border-primary/20 text-primary font-bold text-center text-xs p-2 select-none">

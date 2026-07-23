@@ -2,6 +2,10 @@
 
 Semua catatan perubahan penting pada proyek **BIOS Flasher** milik Megapass Sidoarjo akan dicatat di file ini secara berkala.
 
+## [2.1.5] - 2026-07-23
+### Changed
+- Rename menu **Open Backup** → **Load File** (lebih jelas: buka file .bin ke buffer, bukan hanya backup).
+
 ## [2.1.4] - 2026-07-23
 ### Changed
 - **Compare (Diff) polish (MVP):**

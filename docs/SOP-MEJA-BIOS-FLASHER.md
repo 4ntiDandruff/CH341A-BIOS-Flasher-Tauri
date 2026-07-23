@@ -47,7 +47,7 @@
    - Unit mahal / brick kritis: backup **2–3x**, banding MD5 harus sama
 
 4. **Siapkan file tulis**  
-   - Open Backup clean BIOS, **atau**  
+   - Load File clean BIOS, **atau**  
    - DMI Injector: BIOS rusak (serial/key) + clean BIOS → merge  
    - Gejala late display / mati 30 menit → **Clean ME Region**
 
@@ -84,7 +84,7 @@
 App otomatis tolak Write/Erase/Instant Mode kalau:
 - Pulse **merah** (CH341A gak kebaca)
 - Chip belum Detect
-- Buffer kosong (belum Read / Open Backup)
+- Buffer kosong (belum Read / Load File)
 - Chip 1.8V belum dikonfirmasi adapter
 
 Kalau ditolak: **perbaiki kondisi**, jangan dipaksa.
