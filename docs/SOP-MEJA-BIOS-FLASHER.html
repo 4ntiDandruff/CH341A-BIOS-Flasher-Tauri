@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8"/>
+<title>SOP Meja — BIOS Flasher Megapass v2.1.3</title>
+<style>
+  @page { size: A4 portrait; margin: 10mm; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: "Segoe UI", Arial, sans-serif;
+    font-size: 10.5px;
+    line-height: 1.25;
+    color: #111;
+    margin: 0;
+    padding: 0;
+  }
+  h1 { font-size: 16px; margin: 0 0 2px; }
+  h2 {
+    font-size: 11px;
+    margin: 8px 0 4px;
+    background: #111;
+    color: #fff;
+    padding: 3px 6px;
+    border-radius: 3px;
+  }
+  .sub { color: #444; margin-bottom: 6px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { border: 1px solid #333; padding: 3px 5px; vertical-align: top; }
+  th { background: #eee; text-align: left; }
+  .ok { width: 28px; text-align: center; }
+  .flow {
+    font-family: ui-monospace, monospace;
+    background: #f4f4f4;
+    border: 1px solid #999;
+    padding: 6px;
+    margin: 4px 0;
+    white-space: pre-wrap;
+  }
+  .danger { background: #ffe5e5; }
+  .warn { background: #fff3cd; }
+  .good { background: #e7f7e7; }
+  ul { margin: 2px 0 0 16px; padding: 0; }
+  li { margin: 1px 0; }
+  .foot {
+    margin-top: 6px;
+    border-top: 1px solid #999;
+    padding-top: 4px;
+    font-size: 9.5px;
+    color: #333;
+    display: flex;
+    justify-content: space-between;
+  }
+  .badge {
+    display: inline-block;
+    background: #0b5;
+    color: #fff;
+    padding: 1px 6px;
+    border-radius: 10px;
+    font-weight: 700;
+    font-size: 9px;
+  }
+  @media print {
+    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    h2 { break-after: avoid; }
+  }
+</style>
+</head>
+<body>
+  <h1>SOP MEJA — BIOS FLASHER MEGAPASS <span class="badge">v2.1.3</span></h1>
+  <div class="sub">CH341A + flashrom · Tempel di meja servis · Baca sebelum tembak chip</div>
+
+  <div class="grid">
+    <div>
+      <h2>1) SEBELUM MULAI (WAJIB)</h2>
+      <table>
+        <tr><th>#</th><th>Cek</th><th class="ok">OK</th></tr>
+        <tr><td>1</td><td>Laptop mati total: cabut baterai + adaptor</td><td class="ok">☐</td></tr>
+        <tr><td>2</td><td>Tunggu 30 detik (kapasitor kosong)</td><td class="ok">☐</td></tr>
+        <tr><td>3</td><td>Clip duduk rata, 8 pin nempel</td><td class="ok">☐</td></tr>
+        <tr><td>4</td><td>App pulse <b>HIJAU</b> (USB colok)</td><td class="ok">☐</td></tr>
+        <tr><td>5</td><td>Folder backup: ~/bios-backup/NAMA_CUSTOMER/</td><td class="ok">☐</td></tr>
+      </table>
+      <p class="warn" style="padding:4px;margin:4px 0;border:1px solid #c90;">
+        <b>1.8V?</b> STOP. Wajib adapter level shifter. Tanpa adapter = chip hangus.
+      </p>
+    </div>
+    <div>
+      <h2>2) ALUR STANDAR</h2>
+      <div class="flow">DETECT → READ → BACKUP → (DMI/ME opsional)
+→ ERASE+WRITE+VERIFY / INSTANT MODE
+→ VERIFY LOLOS → rakit/tes nyala</div>
+      <ul>
+        <li><b>Detect</b> — catat chip + voltage</li>
+        <li><b>Read</b> — hex bukan all-FF (kecuali memang kosong)</li>
+        <li><b>Backup</b> — wajib, walau rusak. Unit mahal: 2–3× + MD5 sama</li>
+        <li><b>DMI Inject</b> — pindah serial/key ke clean BIOS</li>
+        <li><b>ME Clean</b> — late display / mati 30 menit</li>
+        <li><b>Instant Mode</b> — paling aman untuk full reflash</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2>3) LARANGAN KERAS</h2>
+  <table class="danger">
+    <tr><th>JANGAN</th><th>Akibat</th></tr>
+    <tr><td>Flash tanpa backup</td><td>Data asli hilang, gak bisa rollback</td></tr>
+    <tr><td>Cabut USB / goyang clip saat proses</td><td>Setengah tulis = brick</td></tr>
+    <tr><td>3.3V ke chip 1.8V tanpa adapter</td><td>Chip hangus</td></tr>
+    <tr><td>Laptop masih standby power</td><td>Timeout / data korup</td></tr>
+    <tr><td>Skip Verify / rakit sebelum VERIFIED</td><td>Risiko rakit chip jelek</td></tr>
+    <tr><td>Anggap hex FF di awal = gagal write</td><td>Sering cuma padding — cek first data offset</td></tr>
+  </table>
+
+  <div class="grid">
+    <div>
+      <h2>4) NAMA FILE</h2>
+      <div class="flow">MERK_MODEL_SN-atau-BID_YYYYMMDD.bin
+Contoh: HP_15s_5CG1234_BID080C7_20260723.bin
+
+~/bios-backup/NAMA_CUSTOMER/
+  ORIGINAL_....bin
+  CLEAN_atau_MERGED.bin
+  CATATAN.txt  (keluhan + hasil)</div>
+    </div>
+    <div>
+      <h2>5) TROUBLE CEPAT</h2>
+      <table>
+        <tr><th>Gejala</th><th>Cek dulu</th></tr>
+        <tr><td>Detect gagal</td><td>Clip, pin kotor, masih bertegangan, USB</td></tr>
+        <tr><td>Read timeout</td><td>Power total mati + 30 dtk; reseat clip</td></tr>
+        <tr><td>Multi chip name</td><td>Pilih nama pertama dari Detect</td></tr>
+        <tr><td>Verify mismatch</td><td>Clip longgar; ulang; jangan rakit</td></tr>
+        <tr><td>Pulse merah</td><td>Cabut-colok; kabel USB data</td></tr>
+        <tr><td>Permission denied</td><td>udev 40-ch341a.rules + cabut-colok</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <h2>6) PRE-FLIGHT APP v2.1.3 (otomatis)</h2>
+  <p class="good" style="padding:4px;border:1px solid #0a0;margin:4px 0;">
+    Write / Erase / Instant Mode <b>ditolak otomatis</b> jika: USB merah · chip belum detect · buffer kosong · 1.8V belum dikonfirmasi.
+    Kalau ditolak: perbaiki kondisi, jangan dipaksa.
+  </p>
+
+  <div class="foot">
+    <div>Megapass Sidoarjo — Servis Hardware · github.com/4ntiDandruff/CH341A-BIOS-Flasher-Tauri</div>
+    <div>Print: Ctrl+P · Margins minimum · 1 halaman</div>
+  </div>
+</body>
+</html>

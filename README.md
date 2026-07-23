@@ -108,5 +108,13 @@ Hasil build binary dapat ditemukan di: `src-tauri/target/release/bios-flasher`.
 
 ---
 
+
+---
+
+## 📋 SOP Meja Servis
+
+- Markdown: [`docs/SOP-MEJA-BIOS-FLASHER.md`](docs/SOP-MEJA-BIOS-FLASHER.md)
+- Print A4 (1 halaman): buka [`docs/SOP-MEJA-BIOS-FLASHER.html`](docs/SOP-MEJA-BIOS-FLASHER.html) → Ctrl+P
+
 ## ℹ️ Tentang Megapass Sidoarjo
 **Megapass Sidoarjo** adalah pusat servis handphone, laptop, dan komputer terpercaya di Sidoarjo, Jawa Timur. Kami melayani perbaikan motherboard tingkat lanjut, pemrograman firmware BIOS, dan optimasi hardware.
