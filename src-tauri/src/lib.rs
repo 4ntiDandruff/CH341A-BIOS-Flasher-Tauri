@@ -171,6 +171,19 @@ fn detect_chip() -> Result<serde_json::Value, String> {
                 chips.push(name.as_str().to_string());
             }
         }
+        // Parse all quoted chip names after multi-match sentence
+        if let Some(pos) = combined.find("Multiple flash chip definitions match") {
+            let slice = &combined[pos..];
+            let re_all = Regex::new(r#""([^"]+)""#).unwrap();
+            for cap in re_all.captures_iter(slice) {
+                if let Some(name) = cap.get(1) {
+                    let n = name.as_str().to_string();
+                    if n.len() >= 4 && !n.contains(' ') && !chips.contains(&n) {
+                        chips.push(n);
+                    }
+                }
+            }
+        }
     }
 
     if chips.is_empty() {
@@ -195,19 +208,25 @@ fn detect_chip() -> Result<serde_json::Value, String> {
 #[tauri::command]
 async fn read_bios(chip: String, window: tauri::Window) -> Result<Vec<u8>, String> {
     let result = std::thread::spawn(move || {
-        let output_path = "/tmp/bios_read_buffer.bin";
+        let output_path = format!("/tmp/bios_read_{}.bin", std::process::id());
 
         let result = run_flashrom_with_progress(
-            &["-p", "ch341a_spi", "-c", &chip, "-r", output_path],
+            &["-p", "ch341a_spi", "-c", &chip, "-r", &output_path],
             &window,
             "Reading",
         );
 
         match result {
             Ok(_) => {
-                fs::read(output_path).map_err(|e| format!("Failed to read output file: {}", e))
+                let data = fs::read(&output_path)
+                    .map_err(|e| format!("Failed to read output file: {}", e));
+                let _ = fs::remove_file(&output_path);
+                data
             }
-            Err(e) => Err(e),
+            Err(e) => {
+                let _ = fs::remove_file(&output_path);
+                Err(e)
+            }
         }
     })
     .join()
@@ -616,15 +635,23 @@ fn extract_dmi_and_key(data: Vec<u8>) -> serde_json::Value {
 
 #[tauri::command]
 async fn write_bios(chip: String, data: Vec<u8>, window: tauri::Window) -> Result<String, String> {
-    let buffer_path = "/tmp/bios_write_buffer.bin";
-    fs::write(buffer_path, &data).map_err(|e| format!("Failed to write buffer: {}", e))?;
+    if chip.trim().is_empty() {
+        return Err("Chip name empty - Detect chip first".to_string());
+    }
+    if data.is_empty() {
+        return Err("Write buffer empty - Load File or Read first".to_string());
+    }
+    let buffer_path = format!("/tmp/bios_write_{}.bin", std::process::id());
+    fs::write(&buffer_path, &data).map_err(|e| format!("Failed to write buffer: {}", e))?;
 
     let result = std::thread::spawn(move || {
-        run_flashrom_with_progress(
-            &["-p", "ch341a_spi", "-c", &chip, "-w", buffer_path],
+        let res = run_flashrom_with_progress(
+            &["-p", "ch341a_spi", "-c", &chip, "-w", &buffer_path],
             &window,
             "Writing",
-        )
+        );
+        let _ = fs::remove_file(&buffer_path);
+        res
     })
     .join()
     .map_err(|_| "Thread panicked".to_string())??;
@@ -638,21 +665,35 @@ async fn verify_bios(
     data: Vec<u8>,
     window: tauri::Window,
 ) -> Result<String, String> {
-    let buffer_path = "/tmp/bios_verify_buffer.bin";
-    fs::write(buffer_path, &data).map_err(|e| format!("Failed to write buffer: {}", e))?;
+    if chip.trim().is_empty() {
+        return Err("Chip name empty - Detect chip first".to_string());
+    }
+    if data.is_empty() {
+        return Err("Verify buffer empty - Load File or Read first".to_string());
+    }
+    let buffer_path = format!("/tmp/bios_verify_{}.bin", std::process::id());
+    fs::write(&buffer_path, &data).map_err(|e| format!("Failed to write buffer: {}", e))?;
 
     let result = std::thread::spawn(move || {
-        run_flashrom_with_progress(
-            &["-p", "ch341a_spi", "-c", &chip, "-v", buffer_path],
+        let res = run_flashrom_with_progress(
+            &["-p", "ch341a_spi", "-c", &chip, "-v", &buffer_path],
             &window,
             "Verifying",
-        )
+        );
+        let _ = fs::remove_file(&buffer_path);
+        res
     })
     .join()
     .map_err(|_| "Thread panicked".to_string())??;
 
-    if result.contains("VERIFIED") {
+    let upper = result.to_uppercase();
+    if upper.contains("VERIFIED")
+        || upper.contains("VERIFICATION SUCCESSFUL")
+        || (upper.contains("VERIFY") && upper.contains("SUCCESS"))
+    {
         Ok("VERIFIED".to_string())
+    } else if result.to_lowercase().contains("failed") || result.to_lowercase().contains("error") {
+        Err(format!("VERIFY FAILED\n{}", result))
     } else {
         Ok(format!("Verification result: {}", result.lines().last().unwrap_or("unknown")))
     }
@@ -688,7 +729,7 @@ fn load_chip_db(app_handle: tauri::AppHandle) -> Result<String, String> {
         return Ok(content);
     }
 
-    Ok("[]".to_string())
+    Ok("{}".to_string())
 }
 
 fn dirs_fallback() -> String {

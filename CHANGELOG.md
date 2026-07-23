@@ -2,6 +2,16 @@
 
 Semua catatan perubahan penting pada proyek **BIOS Flasher** milik Megapass Sidoarjo akan dicatat di file ini secara berkala.
 
+## [2.1.6] - 2026-07-23
+### Fixed
+- Flash path hardening: unique temp files + cleanup for read/write/verify.
+- Write/Verify guards for empty chip/buffer.
+- Stricter verify success/fail parsing.
+- Multi-chip detect parses all quoted names.
+- Chip DB empty fallback object; W25Q64JV voltage corrected to 3.3V.
+### Added
+- Expanded chip database (~82 entries) + bundle chips.json in release.
+
 ## [2.1.5] - 2026-07-23
 ### Changed
 - Rename menu **Open Backup** → **Load File** (lebih jelas: buka file .bin ke buffer, bukan hanya backup).

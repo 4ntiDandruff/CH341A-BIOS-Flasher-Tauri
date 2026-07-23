@@ -14,9 +14,18 @@ const MENU_ITEMS = [
   { id: 8, icon: "💉", label: "DMI Injector", direct: true },
 ];
 
-const APP_VERSION = "2.1.5";
+const APP_VERSION = "2.1.6";
 
 const INDO_CHANGELOG = [
+  {
+    version: "v2.1.6",
+    date: "2026-07-23",
+    items: [
+      "Audit flash path: temp file unik + cleanup, validasi buffer kosong, verify lebih ketat.",
+      "Chip database diperluas (Boya/Fudan/Puya/Atmel/dll) + fix voltage W25Q64JV 3.3V.",
+      "chips.json di-bundle ke release agar get_chip_info tetap jalan di luar folder project."
+    ]
+  },
   {
     version: "v2.1.5",
     date: "2026-07-23",
@@ -1274,7 +1283,7 @@ ${diagnosticError.context || "No raw context"}
             <h3 className="text-lg font-bold flex items-center gap-2">
               🔧 Megapass Service HP & Laptop Sidoarjo
             </h3>
-            <p className="text-xs opacity-60 mt-1">Version 2.1.5 (Tauri Professional Edition)</p>
+            <p className="text-xs opacity-60 mt-1">Version 2.1.6 (Tauri Professional Edition)</p>
             
             <div className="my-6 flex flex-col items-center justify-center py-6 border border-dashed border-base-content/20 rounded-lg bg-base-300">
               <div className="w-24 h-24 rounded-xl bg-primary/10 flex items-center justify-center border border-primary/20 text-primary font-bold text-center text-xs p-2 select-none">

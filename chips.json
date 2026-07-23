@@ -1,11 +1,59 @@
 {
+  "W25Q80BV/W25Q80CV/W25Q80DV": {
+    "manufacturer": "Winbond",
+    "size_kb": 1024,
+    "voltage": "3.3V",
+    "package": "SOP8"
+  },
+  "W25Q16BV/W25Q16CV/W25Q16DV": {
+    "manufacturer": "Winbond",
+    "size_kb": 2048,
+    "voltage": "3.3V",
+    "package": "SOP8"
+  },
+  "W25Q16JV": {
+    "manufacturer": "Winbond",
+    "size_kb": 2048,
+    "voltage": "3.3V",
+    "package": "SOP8"
+  },
+  "W25Q32BV/W25Q32FV": {
+    "manufacturer": "Winbond",
+    "size_kb": 4096,
+    "voltage": "3.3V",
+    "package": "SOP8/DIP8"
+  },
+  "W25Q32JV": {
+    "manufacturer": "Winbond",
+    "size_kb": 4096,
+    "voltage": "3.3V",
+    "package": "SOP8"
+  },
   "W25Q64BV/W25Q64CV/W25Q64FV": {
     "manufacturer": "Winbond",
     "size_kb": 8192,
     "voltage": "3.3V",
     "package": "SOP8/DIP8"
   },
+  "W25Q64JV": {
+    "manufacturer": "Winbond",
+    "size_kb": 8192,
+    "voltage": "3.3V",
+    "package": "SOP8"
+  },
+  "W25Q64JV-.Q": {
+    "manufacturer": "Winbond",
+    "size_kb": 8192,
+    "voltage": "3.3V",
+    "package": "SOP8"
+  },
   "W25Q128BV/W25Q128FV": {
+    "manufacturer": "Winbond",
+    "size_kb": 16384,
+    "voltage": "3.3V",
+    "package": "SOP8/SOP16"
+  },
+  "W25Q128JV": {
     "manufacturer": "Winbond",
     "size_kb": 16384,
     "voltage": "3.3V",
@@ -23,18 +71,6 @@
     "voltage": "3.3V",
     "package": "SOP16/WSON8"
   },
-  "W25Q32BV/W25Q32FV": {
-    "manufacturer": "Winbond",
-    "size_kb": 4096,
-    "voltage": "3.3V",
-    "package": "SOP8/DIP8"
-  },
-  "W25Q16JV": {
-    "manufacturer": "Winbond",
-    "size_kb": 2048,
-    "voltage": "3.3V",
-    "package": "SOP8"
-  },
   "W25Q64FW/W25Q64DW": {
     "manufacturer": "Winbond",
     "size_kb": 8192,
@@ -47,13 +83,43 @@
     "voltage": "1.8V",
     "package": "SOP8/SOP16"
   },
+  "W25Q128JV-IM": {
+    "manufacturer": "Winbond",
+    "size_kb": 16384,
+    "voltage": "1.8V",
+    "package": "SOP8/SOP16"
+  },
   "W25Q256JW/W25Q256NW": {
     "manufacturer": "Winbond",
     "size_kb": 32768,
     "voltage": "1.8V",
     "package": "SOP8/SOP16"
   },
+  "MX25L8006E/MX25L8008E": {
+    "manufacturer": "Macronix",
+    "size_kb": 1024,
+    "voltage": "3.3V",
+    "package": "SOP8"
+  },
+  "MX25L1606E/MX25L1605D": {
+    "manufacturer": "Macronix",
+    "size_kb": 2048,
+    "voltage": "3.3V",
+    "package": "SOP8"
+  },
+  "MX25L3206E": {
+    "manufacturer": "Macronix",
+    "size_kb": 4096,
+    "voltage": "3.3V",
+    "package": "SOP8"
+  },
   "MX25L6406E/MX25L6408E": {
+    "manufacturer": "Macronix",
+    "size_kb": 8192,
+    "voltage": "3.3V",
+    "package": "SOP8"
+  },
+  "MX25L6433F/MX25L6473F": {
     "manufacturer": "Macronix",
     "size_kb": 8192,
     "voltage": "3.3V",
@@ -65,9 +131,9 @@
     "voltage": "3.3V",
     "package": "SOP8/SOP16"
   },
-  "MX25L3206E": {
+  "MX25L12833F/MX25L12873F": {
     "manufacturer": "Macronix",
-    "size_kb": 4096,
+    "size_kb": 16384,
     "voltage": "3.3V",
     "package": "SOP8"
   },
@@ -101,6 +167,18 @@
     "voltage": "1.8V",
     "package": "SOP8/SOP16"
   },
+  "GD25Q16B/GD25Q16C": {
+    "manufacturer": "GigaDevice",
+    "size_kb": 2048,
+    "voltage": "3.3V",
+    "package": "SOP8"
+  },
+  "GD25Q32B": {
+    "manufacturer": "GigaDevice",
+    "size_kb": 4096,
+    "voltage": "3.3V",
+    "package": "SOP8"
+  },
   "GD25Q64B/GD25Q64C": {
     "manufacturer": "GigaDevice",
     "size_kb": 8192,
@@ -113,35 +191,47 @@
     "voltage": "3.3V",
     "package": "SOP8/SOP16"
   },
-  "GD25Q32B": {
-    "manufacturer": "GigaDevice",
-    "size_kb": 4096,
-    "voltage": "3.3V",
-    "package": "SOP8"
-  },
   "GD25Q256D/GD25Q256E": {
     "manufacturer": "GigaDevice",
     "size_kb": 32768,
     "voltage": "3.3V",
     "package": "SOP16"
   },
-  "GD25LQ64C/GD25LQ64E": {
+  "GD25LQ64C": {
     "manufacturer": "GigaDevice",
     "size_kb": 8192,
     "voltage": "1.8V",
     "package": "SOP8"
   },
-  "GD25LQ128C/GD25LB128E": {
+  "GD25LQ128C/GD25LQ128D": {
     "manufacturer": "GigaDevice",
     "size_kb": 16384,
     "voltage": "1.8V",
-    "package": "SOP8/SOP16"
+    "package": "SOP8"
   },
-  "GD25LB256E": {
+  "GD25LQ256D": {
     "manufacturer": "GigaDevice",
     "size_kb": 32768,
     "voltage": "1.8V",
     "package": "SOP16"
+  },
+  "EN25Q32(A/B)": {
+    "manufacturer": "EON",
+    "size_kb": 4096,
+    "voltage": "3.3V",
+    "package": "SOP8"
+  },
+  "EN25Q64": {
+    "manufacturer": "EON",
+    "size_kb": 8192,
+    "voltage": "3.3V",
+    "package": "SOP8"
+  },
+  "EN25Q128": {
+    "manufacturer": "EON",
+    "size_kb": 16384,
+    "voltage": "3.3V",
+    "package": "SOP8"
   },
   "EN25QH64": {
     "manufacturer": "EON",
@@ -155,15 +245,21 @@
     "voltage": "3.3V",
     "package": "SOP8"
   },
-  "EN25QH32B": {
+  "EN25S64": {
     "manufacturer": "EON",
+    "size_kb": 8192,
+    "voltage": "1.8V",
+    "package": "SOP8"
+  },
+  "A25L032": {
+    "manufacturer": "AMIC",
     "size_kb": 4096,
     "voltage": "3.3V",
     "package": "SOP8"
   },
-  "A25L080": {
+  "A25L064": {
     "manufacturer": "AMIC",
-    "size_kb": 1024,
+    "size_kb": 8192,
     "voltage": "3.3V",
     "package": "SOP8"
   },
@@ -179,25 +275,37 @@
     "voltage": "3.3V",
     "package": "SOP8"
   },
-  "S25FL064A": {
+  "SST25VF064C": {
+    "manufacturer": "SST",
+    "size_kb": 8192,
+    "voltage": "3.3V",
+    "package": "SOP8"
+  },
+  "S25FL064P/S25FL064L": {
     "manufacturer": "Spansion",
     "size_kb": 8192,
     "voltage": "3.3V",
     "package": "SOP8/SOP16"
   },
-  "S25FL128S": {
+  "S25FL128S/S25FL128L": {
     "manufacturer": "Spansion",
     "size_kb": 16384,
     "voltage": "3.3V",
     "package": "SOP16"
   },
-  "S25FS512S": {
+  "S25FL256S": {
+    "manufacturer": "Cypress/Spansion",
+    "size_kb": 32768,
+    "voltage": "3.3V",
+    "package": "SOP16"
+  },
+  "S25FL512S": {
     "manufacturer": "Cypress/Spansion",
     "size_kb": 65536,
-    "voltage": "1.8V",
-    "package": "BGA/SOP16"
+    "voltage": "3.3V",
+    "package": "SOP16"
   },
-  "IS25LP064": {
+  "IS25LP064A/IS25LP064": {
     "manufacturer": "ISSI",
     "size_kb": 8192,
     "voltage": "3.3V",
@@ -207,11 +315,47 @@
     "manufacturer": "ISSI",
     "size_kb": 16384,
     "voltage": "3.3V",
-    "package": "SOP16"
+    "package": "SOP8"
+  },
+  "IS25WP064": {
+    "manufacturer": "ISSI",
+    "size_kb": 8192,
+    "voltage": "1.8V",
+    "package": "SOP8"
+  },
+  "IS25WP128": {
+    "manufacturer": "ISSI",
+    "size_kb": 16384,
+    "voltage": "1.8V",
+    "package": "SOP8"
   },
   "AT25SF321": {
     "manufacturer": "Adesto/Dialog",
     "size_kb": 4096,
+    "voltage": "3.3V",
+    "package": "SOP8"
+  },
+  "AT25SF641": {
+    "manufacturer": "Adesto/Dialog",
+    "size_kb": 8192,
+    "voltage": "3.3V",
+    "package": "SOP8"
+  },
+  "AT25SF128A": {
+    "manufacturer": "Adesto/Dialog",
+    "size_kb": 16384,
+    "voltage": "3.3V",
+    "package": "SOP8"
+  },
+  "AT25DF321A": {
+    "manufacturer": "Atmel",
+    "size_kb": 4096,
+    "voltage": "3.3V",
+    "package": "SOP8"
+  },
+  "AT25DF641(A)": {
+    "manufacturer": "Atmel",
+    "size_kb": 8192,
     "voltage": "3.3V",
     "package": "SOP8"
   },
@@ -239,6 +383,12 @@
     "voltage": "3.3V",
     "package": "SOP16"
   },
+  "MT25QU256": {
+    "manufacturer": "Micron",
+    "size_kb": 32768,
+    "voltage": "1.8V",
+    "package": "SOP16"
+  },
   "XM25QH64A": {
     "manufacturer": "XMC",
     "size_kb": 8192,
@@ -251,22 +401,94 @@
     "voltage": "3.3V",
     "package": "SOP8"
   },
+  "XM25QH256B": {
+    "manufacturer": "XMC",
+    "size_kb": 32768,
+    "voltage": "3.3V",
+    "package": "SOP16"
+  },
   "PM25LQ032C": {
     "manufacturer": "PMC",
     "size_kb": 4096,
     "voltage": "3.3V",
     "package": "SOP8"
   },
-  "W25Q64JV": {
-    "manufacturer": "Winbond",
+  "PM25LQ064C": {
+    "manufacturer": "PMC",
     "size_kb": 8192,
-    "voltage": "1.8V",
+    "voltage": "3.3V",
     "package": "SOP8"
   },
-  "W25Q128JV-IM": {
-    "manufacturer": "Winbond",
+  "BY25Q64AS": {
+    "manufacturer": "Boya",
+    "size_kb": 8192,
+    "voltage": "3.3V",
+    "package": "SOP8"
+  },
+  "BY25Q128AS": {
+    "manufacturer": "Boya",
     "size_kb": 16384,
-    "voltage": "1.8V",
-    "package": "SOP8/SOP16"
+    "voltage": "3.3V",
+    "package": "SOP8"
+  },
+  "BY25Q256FS": {
+    "manufacturer": "Boya",
+    "size_kb": 32768,
+    "voltage": "3.3V",
+    "package": "SOP16"
+  },
+  "FM25Q16": {
+    "manufacturer": "Fudan",
+    "size_kb": 2048,
+    "voltage": "3.3V",
+    "package": "SOP8"
+  },
+  "FM25Q32": {
+    "manufacturer": "Fudan",
+    "size_kb": 4096,
+    "voltage": "3.3V",
+    "package": "SOP8"
+  },
+  "FM25Q64": {
+    "manufacturer": "Fudan",
+    "size_kb": 8192,
+    "voltage": "3.3V",
+    "package": "SOP8"
+  },
+  "FM25Q128A": {
+    "manufacturer": "Fudan",
+    "size_kb": 16384,
+    "voltage": "3.3V",
+    "package": "SOP8"
+  },
+  "P25Q64H": {
+    "manufacturer": "Puya",
+    "size_kb": 8192,
+    "voltage": "3.3V",
+    "package": "SOP8"
+  },
+  "P25Q128H": {
+    "manufacturer": "Puya",
+    "size_kb": 16384,
+    "voltage": "3.3V",
+    "package": "SOP8"
+  },
+  "25F160S33B": {
+    "manufacturer": "Intel",
+    "size_kb": 2048,
+    "voltage": "3.3V",
+    "package": "SOP8"
+  },
+  "25F320S33B": {
+    "manufacturer": "Intel",
+    "size_kb": 4096,
+    "voltage": "3.3V",
+    "package": "SOP8"
+  },
+  "25F640S33B": {
+    "manufacturer": "Intel",
+    "size_kb": 8192,
+    "voltage": "3.3V",
+    "package": "SOP8"
   }
 }
