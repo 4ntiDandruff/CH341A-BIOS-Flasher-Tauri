@@ -1,4 +1,4 @@
-# ⚡ BIOS Flasher Professional Edition v2.1.0
+# ⚡ BIOS Flasher Professional Edition v2.1.3
 ### 🔧 *The Ultimate SPI Flasher Tool for Megapass Sidoarjo*
 
 [![Tauri](https://img.shields.io/badge/Framework-Tauri%20v2-blue?logo=tauri)](https://tauri.app/)
@@ -21,7 +21,8 @@ Aplikasi GUI modern, super cepat, dan ringan berbasis **Tauri v2 (Rust Backend &
 7.  **🚨 BSOD Red Alert Diagnostic Boundary:** Menangkap crash/error sistem di level hardware/software dan menyajikan data error terstruktur (Kode Error, File Source, Line, & Context) untuk memudahkan perbaikan instan oleh AI tanpa halusinasi.
 8.  **⚡ Instant Mode:** Pipeline otomatisasi sekali jalan: Erase → Write → Verify.
 9.  **🟢 Live USB Pulse Indicator:** Indikator pendeteksi status koneksi hardware programmer CH341A secara real-time.
-10. **🔊 Chime & Alert Sound:** Web Audio API untuk nada status (Chime sukses, Buzz gagal).
+10. **🛡️ Pre-flight Gate:** Cek USB + chip + buffer + alert 1.8V sebelum Write/Erase/Instant Mode.
+11. **🔊 Chime & Alert Sound:** Web Audio API untuk nada status (Chime sukses, Buzz gagal).
 
 ---
 

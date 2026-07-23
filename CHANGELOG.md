@@ -2,6 +2,19 @@
 
 Semua catatan perubahan penting pada proyek **BIOS Flasher** milik Megapass Sidoarjo akan dicatat di file ini secara berkala.
 
+## [2.1.3] - 2026-07-23
+### Added
+- **Pre-flight Gate:** Validasi wajib sebelum Write / Erase / Instant Mode:
+  * CH341A USB connected (pulse hijau)
+  * Chip sudah Detect
+  * Buffer terisi (untuk Write/Instant)
+  * Konfirmasi eksplisit jika chip 1.8V (adapter level shifter)
+- **Udev rule permanen:** `/etc/udev/rules.d/40-ch341a.rules` (MODE 0666, GROUP plugdev) — flashrom non-sudo.
+
+### Changed
+- **Version sync:** `package.json`, `Cargo.toml`, `tauri.conf.json`, desktop entry, About modal → **2.1.3**.
+- Write & Instant Mode minta konfirmasi ukuran data sebelum eksekusi.
+
 ## [2.1.2] - 2026-07-21
 ### Added
 - **💉 DMI Injector (Identity Merger):** Fitur pemindah otomatis data DMI asli (Serial/Windows Key) dari BIOS rusak ke Clean BIOS dalam 1 klik.

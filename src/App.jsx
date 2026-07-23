@@ -14,7 +14,18 @@ const MENU_ITEMS = [
   { id: 8, icon: "💉", label: "DMI Injector", direct: true },
 ];
 
+const APP_VERSION = "2.1.3";
+
 const INDO_CHANGELOG = [
+  {
+    version: "v2.1.3",
+    date: "2026-07-23",
+    items: [
+      "Pre-flight Gate: cek USB + chip + buffer + konfirmasi adapter 1.8V sebelum Write/Erase/Instant Mode.",
+      "Udev rule CH341A permanen: flashrom non-sudo (MODE 0666, group plugdev).",
+      "Version sync: package/Cargo/tauri/desktop/About diseragamkan ke 2.1.3."
+    ]
+  },
   {
     version: "v2.1.2",
     date: "2026-07-21",
@@ -232,6 +243,42 @@ export default function App() {
   const appendLog = useCallback((msg) => {
     setStatusLog((prev) => prev + "\n" + msg);
   }, []);
+
+  async function runPreflight({ needBuffer = false, opLabel = "operasi" } = {}) {
+    const blockers = [];
+    if (!usbConnected) blockers.push("CH341A tidak terdeteksi di USB (pulse merah)");
+    if (!chip) blockers.push("Chip belum di-Detect");
+    if (needBuffer && (!buffer || buffer.length === 0)) {
+      blockers.push("Buffer kosong - Read chip atau Open Backup dulu");
+    }
+
+    if (blockers.length > 0) {
+      const msg = `Pre-flight GAGAL untuk ${opLabel}:\n- ${blockers.join("\n- ")}`;
+      appendLog(`⛔ ${msg}`);
+      playSound("error");
+      try {
+        await message(msg, { title: "Pre-flight Check", kind: "error" });
+      } catch (_) {}
+      return false;
+    }
+
+    if (chipInfo?.voltage === "1.8V") {
+      const ok = window.confirm(
+        `Chip ${chip} = 1.8V\n\nWAJIB pakai adapter level shifter 1.8V.\nTanpa adapter chip bisa hangus.\n\nAdapter 1.8V sudah terpasang?`
+      );
+      if (!ok) {
+        appendLog("⛔ Dibatalkan - konfirmasi adapter 1.8V ditolak operator");
+        return false;
+      }
+      appendLog("✅ Pre-flight: adapter 1.8V dikonfirmasi operator");
+    }
+
+    appendLog(
+      `✅ Pre-flight OK untuk ${opLabel} (USB + chip${needBuffer ? " + buffer" : ""})`
+    );
+    return true;
+  }
+
 
   // Keyboard shortcut Ctrl+F to focus search input
   useEffect(() => {
@@ -664,9 +711,13 @@ ${diagnosticError.context || "No raw context"}
   };
 
   async function handleWrite() {
-    if (!chip) { appendLog("⚠️ Detect chip first!"); return; }
-    if (!buffer || buffer.length === 0) { appendLog("⚠️ No data in buffer!"); return; }
-    appendLog(`✍️ Writing ${(buffer.length / 1024).toFixed(0)}KB to ${chip}...`);
+    if (!(await runPreflight({ needBuffer: true, opLabel: "Write" }))) return;
+    const sizeKb = (buffer.length / 1024).toFixed(0);
+    if (!window.confirm(`Write ${sizeKb}KB ke ${chip}?\n\nPastikan backup sudah disimpan.`)) {
+      appendLog("Write dibatalkan operator.");
+      return;
+    }
+    appendLog(`✍️ Writing ${sizeKb}KB to ${chip}...`);
     const start = performance.now();
     await invoke("write_bios", { chip, data: Array.from(buffer) });
     const duration = formatDuration(performance.now() - start);
@@ -698,7 +749,7 @@ ${diagnosticError.context || "No raw context"}
   }
 
   async function handleErase() {
-    if (!chip) { appendLog("⚠️ Detect chip first!"); return; }
+    if (!(await runPreflight({ needBuffer: false, opLabel: "Erase" }))) return;
     if (!window.confirm(`⚠️ ERASE chip ${chip}?\nThis will permanently destroy all data!`)) return;
     if (!window.confirm(`🚨 FINAL WARNING!\nAre you ABSOLUTELY SURE you want to erase ${chip}?`)) return;
     appendLog(`🗑️ Erasing ${chip}...`);
@@ -712,8 +763,12 @@ ${diagnosticError.context || "No raw context"}
   }
 
   async function handleInstantMode() {
-    if (!chip) { appendLog("⚠️ Detect chip first!"); return; }
-    if (!buffer || buffer.length === 0) { appendLog("⚠️ No data in buffer to write!"); return; }
+    if (!(await runPreflight({ needBuffer: true, opLabel: "Instant Mode" }))) return;
+    const sizeKb = (buffer.length / 1024).toFixed(0);
+    if (!window.confirm(`Instant Mode\nErase -> Write -> Verify\n\nTarget: ${chip}\nData: ${sizeKb}KB\n\nLanjut?`)) {
+      appendLog("Instant Mode dibatalkan operator.");
+      return;
+    }
 
     appendLog("⚡ Starting Instant Mode (Erase → Write → Verify)...");
     const totalStart = performance.now();
@@ -1168,7 +1223,7 @@ ${diagnosticError.context || "No raw context"}
             <h3 className="text-lg font-bold flex items-center gap-2">
               🔧 Megapass Service HP & Laptop Sidoarjo
             </h3>
-            <p className="text-xs opacity-60 mt-1">Version 2.1.0 (Tauri Professional Edition)</p>
+            <p className="text-xs opacity-60 mt-1">Version 2.1.3 (Tauri Professional Edition)</p>
             
             <div className="my-6 flex flex-col items-center justify-center py-6 border border-dashed border-base-content/20 rounded-lg bg-base-300">
               <div className="w-24 h-24 rounded-xl bg-primary/10 flex items-center justify-center border border-primary/20 text-primary font-bold text-center text-xs p-2 select-none">
