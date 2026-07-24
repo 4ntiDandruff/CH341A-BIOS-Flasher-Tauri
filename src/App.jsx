@@ -14,9 +14,16 @@ const MENU_ITEMS = [
   { id: 8, icon: "💉", label: "DMI Injector", direct: true },
 ];
 
-const APP_VERSION = "2.1.6";
+const APP_VERSION = "2.1.7";
 
 const INDO_CHANGELOG = [
+  {
+    version: "v2.1.7",
+    date: "2026-07-24",
+    items: [
+      "Perbaikan visual kartu DMI: grid layout proporsional, alignment teks kiri-kanan rapi, space ikon seragam."
+    ]
+  },
   {
     version: "v2.1.6",
     date: "2026-07-23",
@@ -1075,30 +1082,37 @@ ${diagnosticError.context || "No raw context"}
           </div>
 
           {/* Smart Card DMI & Info */}
-          <div className="p-3 bg-base-300/40 border-b border-base-content/10 text-xs grid grid-cols-2 gap-3.5">
+          <div className="p-3.5 bg-base-300/40 border-b border-base-content/10 text-xs grid grid-cols-2 gap-6 items-start">
             {/* Column 1: Device Model & Serial */}
-            <div className="space-y-2">
-              <div className="font-semibold opacity-60 uppercase tracking-wider text-[10px] flex items-center gap-2">
-                <span>📟 Device Identity</span>
+            <div className="space-y-2.5">
+              <div className="font-semibold opacity-60 uppercase tracking-wider text-[9px] flex items-center gap-2 pb-1 border-b border-base-content/10">
+                <span className="w-4 text-center">📟</span>
+                <span>Device Identity</span>
                 {dmiInfo.brand !== "Unknown" && (
-                  <span className="badge badge-accent badge-outline text-[9px] scale-95 font-bold uppercase">{dmiInfo.brand}</span>
+                  <span className="badge badge-accent badge-outline text-[8px] font-bold uppercase py-0 px-1.5">{dmiInfo.brand}</span>
                 )}
               </div>
               
-              <div className="flex justify-between border-b border-base-content/5 pb-1.5 pt-0.5">
-                <span className="opacity-70">💻 Model:</span>
-                <span className="font-bold text-base-content select-text">
+              <div className="flex justify-between items-center border-b border-base-content/5 pb-2 pt-0.5">
+                <div className="flex items-center gap-2">
+                  <span className="w-4 text-center opacity-70">💻</span>
+                  <span className="opacity-70">Model:</span>
+                </div>
+                <span className="font-bold text-base-content select-text text-right truncate max-w-44" title={dmiInfo.brand !== "Unknown" ? `${dmiInfo.brand} ${dmiInfo.model}` : "Unknown"}>
                   {dmiInfo.brand !== "Unknown" ? `${dmiInfo.brand} ${dmiInfo.model}` : "Unknown"}
                 </span>
               </div>
               
-              <div className="flex justify-between items-center border-b border-base-content/5 pb-1">
-                <span className="opacity-70">📋 Serial Number:</span>
+              <div className="flex justify-between items-center border-b border-base-content/5 pb-1.5">
+                <div className="flex items-center gap-2">
+                  <span className="w-4 text-center opacity-70">📋</span>
+                  <span className="opacity-70">Serial Number:</span>
+                </div>
                 {editingField === "sn" ? (
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1">
                     <input 
                       type="text" 
-                      className="input input-bordered input-xs font-mono w-28 focus:input-primary"
+                      className="input input-bordered input-xs font-mono w-24 text-right focus:input-primary"
                       value={editValue}
                       onChange={(e) => setEditValue(e.target.value)}
                     />
@@ -1106,10 +1120,10 @@ ${diagnosticError.context || "No raw context"}
                     <button className="btn btn-xs btn-ghost px-1" onClick={cancelEditField}>✕</button>
                   </div>
                 ) : (
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-mono font-semibold select-text">{dmiInfo.serial_number}</span>
+                  <div className="flex items-center gap-1.5 justify-end">
+                    <span className="font-mono font-semibold select-text text-right">{dmiInfo.serial_number}</span>
                     {dmiInfo.serial_number !== "Not Found" && (
-                      <>
+                      <div className="flex gap-0.5">
                         <button 
                           className="btn btn-xs btn-ghost p-1 opacity-50 hover:opacity-100 text-info" 
                           onClick={() => startEditField("sn", dmiInfo.serial_number)}
@@ -1124,7 +1138,7 @@ ${diagnosticError.context || "No raw context"}
                         >
                           {copiedField === "sn" ? "✓" : "📋"}
                         </button>
-                      </>
+                      </div>
                     )}
                   </div>
                 )}
@@ -1132,21 +1146,27 @@ ${diagnosticError.context || "No raw context"}
             </div>
 
             {/* Column 2: Windows Key & Special Brand DMI */}
-            <div className="space-y-2">
-              <div className="font-semibold opacity-60 uppercase tracking-wider text-[10px] flex justify-between items-center">
-                <span>🔑 Security & Specs</span>
+            <div className="space-y-2.5">
+              <div className="font-semibold opacity-60 uppercase tracking-wider text-[9px] flex justify-between items-center pb-1 border-b border-base-content/10">
+                <div className="flex items-center gap-2">
+                  <span className="w-4 text-center">🔑</span>
+                  <span>Security & Specs</span>
+                </div>
                 {comparisonTargetName && (
-                  <span className="text-[9px] text-success tracking-tight">vs {comparisonTargetName}</span>
+                  <span className="text-[8px] text-success tracking-tight bg-success/10 px-1.5 py-0.5 rounded font-mono">vs {comparisonTargetName}</span>
                 )}
               </div>
               
-              <div className="flex justify-between items-center border-b border-base-content/5 pb-1">
-                <span className="opacity-70">🔑 Windows Key:</span>
+              <div className="flex justify-between items-center border-b border-base-content/5 pb-1.5 pt-0.5">
+                <div className="flex items-center gap-2">
+                  <span className="w-4 text-center opacity-70">🔑</span>
+                  <span className="opacity-70">Windows Key:</span>
+                </div>
                 {editingField === "winKey" ? (
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1">
                     <input 
                       type="text" 
-                      className="input input-bordered input-xs font-mono w-28 focus:input-primary"
+                      className="input input-bordered input-xs font-mono w-24 text-right focus:input-primary"
                       value={editValue}
                       onChange={(e) => setEditValue(e.target.value)}
                     />
@@ -1154,10 +1174,10 @@ ${diagnosticError.context || "No raw context"}
                     <button className="btn btn-xs btn-ghost px-1" onClick={cancelEditField}>✕</button>
                   </div>
                 ) : (
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-mono font-bold text-primary select-text">{dmiInfo.windows_key}</span>
+                  <div className="flex items-center gap-1.5 justify-end">
+                    <span className="font-mono font-bold text-primary select-text text-right">{dmiInfo.windows_key}</span>
                     {dmiInfo.windows_key !== "Not Found" && (
-                      <>
+                      <div className="flex gap-0.5">
                         <button 
                           className="btn btn-xs btn-ghost p-1 opacity-50 hover:opacity-100 text-info" 
                           onClick={() => startEditField("winKey", dmiInfo.windows_key)}
@@ -1172,7 +1192,7 @@ ${diagnosticError.context || "No raw context"}
                         >
                           {copiedField === "winKey" ? "✓" : "📋"}
                         </button>
-                      </>
+                      </div>
                     )}
                   </div>
                 )}
@@ -1180,13 +1200,16 @@ ${diagnosticError.context || "No raw context"}
 
               {/* HP Specific: Board ID */}
               {dmiInfo.brand === "HP" && dmiInfo.board_id !== "Not Found" && (
-                <div className="flex justify-between items-center border-b border-base-content/5 pb-1">
-                  <span className="opacity-70 text-warning font-semibold">⚙️ HP Board ID (BID):</span>
+                <div className="flex justify-between items-center border-b border-base-content/5 pb-1.5">
+                  <div className="flex items-center gap-2">
+                    <span className="w-4 text-center opacity-70">⚙️</span>
+                    <span className="opacity-70 text-warning font-semibold">HP Board ID (BID):</span>
+                  </div>
                   {editingField === "bid" ? (
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1">
                       <input 
                         type="text" 
-                        className="input input-bordered input-xs font-mono w-20 focus:input-primary"
+                        className="input input-bordered input-xs font-mono w-20 text-right focus:input-primary"
                         value={editValue}
                         onChange={(e) => setEditValue(e.target.value)}
                       />
@@ -1194,22 +1217,24 @@ ${diagnosticError.context || "No raw context"}
                       <button className="btn btn-xs btn-ghost px-1" onClick={cancelEditField}>✕</button>
                     </div>
                   ) : (
-                    <div className="flex items-center gap-1.5">
-                      <span className="font-mono font-bold text-warning select-text">{dmiInfo.board_id}</span>
-                      <button 
-                        className="btn btn-xs btn-ghost p-1 opacity-50 hover:opacity-100 text-info" 
-                        onClick={() => startEditField("bid", dmiInfo.board_id)}
-                        title="Edit HP Board ID manual"
-                      >
-                        ✏️
-                      </button>
-                      <button 
-                        className={`btn btn-xs btn-ghost p-1 ${copiedField === "bid" ? "text-success" : "opacity-50 hover:opacity-100"}`} 
-                        onClick={() => copyToClipboard(dmiInfo.board_id, "bid")}
-                        title="Copy to clipboard"
-                      >
-                        {copiedField === "bid" ? "✓" : "📋"}
-                      </button>
+                    <div className="flex items-center gap-1.5 justify-end">
+                      <span className="font-mono font-bold text-warning select-text text-right">{dmiInfo.board_id}</span>
+                      <div className="flex gap-0.5">
+                        <button 
+                          className="btn btn-xs btn-ghost p-1 opacity-50 hover:opacity-100 text-info" 
+                          onClick={() => startEditField("bid", dmiInfo.board_id)}
+                          title="Edit HP Board ID manual"
+                        >
+                          ✏️
+                        </button>
+                        <button 
+                          className={`btn btn-xs btn-ghost p-1 ${copiedField === "bid" ? "text-success" : "opacity-50 hover:opacity-100"}`} 
+                          onClick={() => copyToClipboard(dmiInfo.board_id, "bid")}
+                          title="Copy to clipboard"
+                        >
+                          {copiedField === "bid" ? "✓" : "📋"}
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -1217,13 +1242,16 @@ ${diagnosticError.context || "No raw context"}
 
               {/* Dell Specific: Service Tag */}
               {dmiInfo.brand === "Dell" && dmiInfo.service_tag !== "Not Found" && (
-                <div className="flex justify-between items-center border-b border-base-content/5 pb-1">
-                  <span className="opacity-70 text-info font-semibold">🏷️ Dell Service Tag:</span>
+                <div className="flex justify-between items-center border-b border-base-content/5 pb-1.5">
+                  <div className="flex items-center gap-2">
+                    <span className="w-4 text-center opacity-70">🏷️</span>
+                    <span className="opacity-70 text-info font-semibold">Dell Service Tag:</span>
+                  </div>
                   {editingField === "svctag" ? (
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1">
                       <input 
                         type="text" 
-                        className="input input-bordered input-xs font-mono w-20 focus:input-primary"
+                        className="input input-bordered input-xs font-mono w-20 text-right focus:input-primary"
                         value={editValue}
                         onChange={(e) => setEditValue(e.target.value)}
                       />
@@ -1231,31 +1259,36 @@ ${diagnosticError.context || "No raw context"}
                       <button className="btn btn-xs btn-ghost px-1" onClick={cancelEditField}>✕</button>
                     </div>
                   ) : (
-                    <div className="flex items-center gap-1.5">
-                      <span className="font-mono font-bold text-info select-text">{dmiInfo.service_tag}</span>
-                      <button 
-                        className="btn btn-xs btn-ghost p-1 opacity-50 hover:opacity-100 text-info" 
-                        onClick={() => startEditField("svctag", dmiInfo.service_tag)}
-                        title="Edit Dell Service Tag manual"
-                      >
-                        ✏️
-                      </button>
-                      <button 
-                        className={`btn btn-xs btn-ghost p-1 ${copiedField === "svctag" ? "text-success" : "opacity-50 hover:opacity-100"}`} 
-                        onClick={() => copyToClipboard(dmiInfo.service_tag, "svctag")}
-                        title="Copy to clipboard"
-                      >
-                        {copiedField === "svctag" ? "✓" : "📋"}
-                      </button>
+                    <div className="flex items-center gap-1.5 justify-end">
+                      <span className="font-mono font-bold text-info select-text text-right">{dmiInfo.service_tag}</span>
+                      <div className="flex gap-0.5">
+                        <button 
+                          className="btn btn-xs btn-ghost p-1 opacity-50 hover:opacity-100 text-info" 
+                          onClick={() => startEditField("svctag", dmiInfo.service_tag)}
+                          title="Edit Dell Service Tag manual"
+                        >
+                          ✏️
+                        </button>
+                        <button 
+                          className={`btn btn-xs btn-ghost p-1 ${copiedField === "svctag" ? "text-success" : "opacity-50 hover:opacity-100"}`} 
+                          onClick={() => copyToClipboard(dmiInfo.service_tag, "svctag")}
+                          title="Copy to clipboard"
+                        >
+                          {copiedField === "svctag" ? "✓" : "📋"}
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>
               )}
 
               {dmiInfo.brand !== "HP" && dmiInfo.brand !== "Dell" && (
-                <div className="flex justify-between items-center border-b border-base-content/5 pb-1">
-                  <span className="opacity-70">🏷️ Tag/BID Status:</span>
-                  <span className="opacity-40 italic">Not Required</span>
+                <div className="flex justify-between items-center border-b border-base-content/5 pb-1.5">
+                  <div className="flex items-center gap-2">
+                    <span className="w-4 text-center opacity-70">🏷️</span>
+                    <span className="opacity-70">Tag/BID Status:</span>
+                  </div>
+                  <span className="opacity-40 italic text-right">Not Required</span>
                 </div>
               )}
             </div>
@@ -1490,7 +1523,7 @@ ${diagnosticError.context || "No raw context"}
             <h3 className="text-lg font-bold flex items-center gap-2">
               🔧 Megapass Service HP & Laptop Sidoarjo
             </h3>
-            <p className="text-xs opacity-60 mt-1">Version 2.1.6 (Tauri Professional Edition)</p>
+            <p className="text-xs opacity-60 mt-1">Version 2.1.7 (Tauri Professional Edition)</p>
             
             <div className="my-6 flex flex-col items-center justify-center py-6 border border-dashed border-base-content/20 rounded-lg bg-base-300">
               <div className="w-24 h-24 rounded-xl bg-primary/10 flex items-center justify-center border border-primary/20 text-primary font-bold text-center text-xs p-2 select-none">

@@ -2,6 +2,10 @@
 
 Semua catatan perubahan penting pada proyek **BIOS Flasher** milik Megapass Sidoarjo akan dicatat di file ini secara berkala.
 
+## [2.1.7] - 2026-07-24
+### Changed
+- **DMI Layout Polish:** Grid layout kartu Device Identity kanan-kiri proporsional, alignment teks kiri-kanan rapi, bounding box icon seragam.
+
 ## [2.1.6] - 2026-07-23
 ### Fixed
 - Flash path hardening: unique temp files + cleanup for read/write/verify.
