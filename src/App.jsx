@@ -14,9 +14,16 @@ const MENU_ITEMS = [
   { id: 8, icon: "💉", label: "DMI Injector", direct: true },
 ];
 
-const APP_VERSION = "2.1.8";
+const APP_VERSION = "2.1.9";
 
 const INDO_CHANGELOG = [
+  {
+    version: "v2.1.9",
+    date: "2026-07-24",
+    items: [
+      "Perbaikan DMI Card Misalignment: Mengubah struktur dari kolom independen menjadi satu baris grid horizontal tunggal (h-7) agar baris kiri-kanan sejajar mutlak."
+    ]
+  },
   {
     version: "v2.1.8",
     date: "2026-07-24",
@@ -1089,125 +1096,124 @@ ${diagnosticError.context || "No raw context"}
           </div>
 
           {/* Smart Card DMI & Info */}
-          <div className="p-3.5 bg-base-300/40 border-b border-base-content/10 text-xs grid grid-cols-2 gap-6 items-start flex-shrink-0">
-            {/* Column 1: Device Model & Serial */}
-            <div className="space-y-2.5">
-              <div className="font-semibold opacity-60 uppercase tracking-wider text-[9px] flex items-center gap-2 pb-1 border-b border-base-content/10">
-                <span className="w-4 text-center">📟</span>
-                <span>Device Identity</span>
-                {dmiInfo.brand !== "Unknown" && (
-                  <span className="badge badge-accent badge-outline text-[8px] font-bold uppercase py-0 px-1.5">{dmiInfo.brand}</span>
-                )}
+          <div className="p-3.5 bg-base-300/40 border-b border-base-content/10 text-xs grid grid-cols-2 gap-x-6 gap-y-2 items-center flex-shrink-0">
+            
+            {/* ROW 1: HEADERS */}
+            <div className="font-semibold opacity-60 uppercase tracking-wider text-[9px] flex items-center gap-2 pb-1 border-b border-base-content/10 h-7">
+              <span className="w-4 text-center">📟</span>
+              <span>Device Identity</span>
+              {dmiInfo.brand !== "Unknown" && (
+                <span className="badge badge-accent badge-outline text-[8px] font-bold uppercase py-0 px-1.5">{dmiInfo.brand}</span>
+              )}
+            </div>
+            <div className="font-semibold opacity-60 uppercase tracking-wider text-[9px] flex justify-between items-center pb-1 border-b border-base-content/10 h-7">
+              <div className="flex items-center gap-2">
+                <span className="w-4 text-center">🔑</span>
+                <span>Security & Specs</span>
               </div>
-              
-              <div className="flex justify-between items-center border-b border-base-content/5 pb-2 pt-0.5">
-                <div className="flex items-center gap-2">
-                  <span className="w-4 text-center opacity-70">💻</span>
-                  <span className="opacity-70">Model:</span>
-                </div>
-                <span className="font-bold text-base-content select-text text-right truncate max-w-44" title={dmiInfo.brand !== "Unknown" ? `${dmiInfo.brand} ${dmiInfo.model}` : "Unknown"}>
-                  {dmiInfo.brand !== "Unknown" ? `${dmiInfo.brand} ${dmiInfo.model}` : "Unknown"}
-                </span>
-              </div>
-              
-              <div className="flex justify-between items-center border-b border-base-content/5 pb-1.5">
-                <div className="flex items-center gap-2">
-                  <span className="w-4 text-center opacity-70">📋</span>
-                  <span className="opacity-70">Serial Number:</span>
-                </div>
-                {editingField === "sn" ? (
-                  <div className="flex items-center gap-1">
-                    <input 
-                      type="text" 
-                      className="input input-bordered input-xs font-mono w-24 text-right focus:input-primary"
-                      value={editValue}
-                      onChange={(e) => setEditValue(e.target.value)}
-                    />
-                    <button className="btn btn-xs btn-success px-1" onClick={() => saveEditField("sn", dmiInfo.serial_number_offset)}>💾</button>
-                    <button className="btn btn-xs btn-ghost px-1" onClick={cancelEditField}>✕</button>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-1.5 justify-end">
-                    <span className="font-mono font-semibold select-text text-right">{dmiInfo.serial_number}</span>
-                    {dmiInfo.serial_number !== "Not Found" && (
-                      <div className="flex gap-0.5">
-                        <button 
-                          className="btn btn-xs btn-ghost p-1 opacity-50 hover:opacity-100 text-info" 
-                          onClick={() => startEditField("sn", dmiInfo.serial_number)}
-                          title="Edit Serial Number manual"
-                        >
-                          ✏️
-                        </button>
-                        <button 
-                          className={`btn btn-xs btn-ghost p-1 ${copiedField === "sn" ? "text-success" : "opacity-50 hover:opacity-100"}`} 
-                          onClick={() => copyToClipboard(dmiInfo.serial_number, "sn")}
-                          title="Copy to clipboard"
-                        >
-                          {copiedField === "sn" ? "✓" : "📋"}
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
+              {comparisonTargetName && (
+                <span className="text-[8px] text-success tracking-tight bg-success/10 px-1.5 py-0.5 rounded font-mono">vs {comparisonTargetName}</span>
+              )}
             </div>
 
-            {/* Column 2: Windows Key & Special Brand DMI */}
-            <div className="space-y-2.5">
-              <div className="font-semibold opacity-60 uppercase tracking-wider text-[9px] flex justify-between items-center pb-1 border-b border-base-content/10">
-                <div className="flex items-center gap-2">
-                  <span className="w-4 text-center">🔑</span>
-                  <span>Security & Specs</span>
-                </div>
-                {comparisonTargetName && (
-                  <span className="text-[8px] text-success tracking-tight bg-success/10 px-1.5 py-0.5 rounded font-mono">vs {comparisonTargetName}</span>
-                )}
+            {/* ROW 2: MODEL vs WINDOWS KEY */}
+            <div className="flex justify-between items-center border-b border-base-content/5 pb-1.5 pt-1 h-7">
+              <div className="flex items-center gap-2">
+                <span className="w-4 text-center opacity-70">💻</span>
+                <span className="opacity-70">Model:</span>
               </div>
-              
-              <div className="flex justify-between items-center border-b border-base-content/5 pb-1.5 pt-0.5">
-                <div className="flex items-center gap-2">
-                  <span className="w-4 text-center opacity-70">🔑</span>
-                  <span className="opacity-70">Windows Key:</span>
-                </div>
-                {editingField === "winKey" ? (
-                  <div className="flex items-center gap-1">
-                    <input 
-                      type="text" 
-                      className="input input-bordered input-xs font-mono w-24 text-right focus:input-primary"
-                      value={editValue}
-                      onChange={(e) => setEditValue(e.target.value)}
-                    />
-                    <button className="btn btn-xs btn-success px-1" onClick={() => saveEditField("winKey", dmiInfo.windows_key_offset)}>💾</button>
-                    <button className="btn btn-xs btn-ghost px-1" onClick={cancelEditField}>✕</button>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-1.5 justify-end">
-                    <span className="font-mono font-bold text-primary select-text text-right">{dmiInfo.windows_key}</span>
-                    {dmiInfo.windows_key !== "Not Found" && (
-                      <div className="flex gap-0.5">
-                        <button 
-                          className="btn btn-xs btn-ghost p-1 opacity-50 hover:opacity-100 text-info" 
-                          onClick={() => startEditField("winKey", dmiInfo.windows_key)}
-                          title="Edit Windows Key manual"
-                        >
-                          ✏️
-                        </button>
-                        <button 
-                          className={`btn btn-xs btn-ghost p-1 ${copiedField === "winKey" ? "text-success" : "opacity-50 hover:opacity-100"}`} 
-                          onClick={() => copyToClipboard(dmiInfo.windows_key, "winKey")}
-                          title="Copy to clipboard"
-                        >
-                          {copiedField === "winKey" ? "✓" : "📋"}
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )}
+              <span className="font-bold text-base-content select-text text-right truncate max-w-44" title={dmiInfo.brand !== "Unknown" ? `${dmiInfo.brand} ${dmiInfo.model}` : "Unknown"}>
+                {dmiInfo.brand !== "Unknown" ? `${dmiInfo.brand} ${dmiInfo.model}` : "Unknown"}
+              </span>
+            </div>
+            
+            <div className="flex justify-between items-center border-b border-base-content/5 pb-1.5 pt-1 h-7">
+              <div className="flex items-center gap-2">
+                <span className="w-4 text-center opacity-70">🔑</span>
+                <span className="opacity-70">Windows Key:</span>
               </div>
+              {editingField === "winKey" ? (
+                <div className="flex items-center gap-1">
+                  <input 
+                    type="text" 
+                    className="input input-bordered input-xs font-mono w-24 text-right focus:input-primary"
+                    value={editValue}
+                    onChange={(e) => setEditValue(e.target.value)}
+                  />
+                  <button className="btn btn-xs btn-success px-1" onClick={() => saveEditField("winKey", dmiInfo.windows_key_offset)}>💾</button>
+                  <button className="btn btn-xs btn-ghost px-1" onClick={cancelEditField}>✕</button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-1.5 justify-end">
+                  <span className="font-mono font-bold text-primary select-text text-right">{dmiInfo.windows_key}</span>
+                  {dmiInfo.windows_key !== "Not Found" && (
+                    <div className="flex gap-0.5">
+                      <button 
+                        className="btn btn-xs btn-ghost p-1 opacity-50 hover:opacity-100 text-info" 
+                        onClick={() => startEditField("winKey", dmiInfo.windows_key)}
+                        title="Edit Windows Key manual"
+                      >
+                        ✏️
+                      </button>
+                      <button 
+                        className={`btn btn-xs btn-ghost p-1 ${copiedField === "winKey" ? "text-success" : "opacity-50 hover:opacity-100"}`} 
+                        onClick={() => copyToClipboard(dmiInfo.windows_key, "winKey")}
+                        title="Copy to clipboard"
+                      >
+                        {copiedField === "winKey" ? "✓" : "📋"}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
 
+            {/* ROW 3: SERIAL NUMBER vs TAG/BID */}
+            <div className="flex justify-between items-center border-b border-base-content/5 pb-1.5 h-7">
+              <div className="flex items-center gap-2">
+                <span className="w-4 text-center opacity-70">📋</span>
+                <span className="opacity-70">Serial Number:</span>
+              </div>
+              {editingField === "sn" ? (
+                <div className="flex items-center gap-1">
+                  <input 
+                    type="text" 
+                    className="input input-bordered input-xs font-mono w-24 text-right focus:input-primary"
+                    value={editValue}
+                    onChange={(e) => setEditValue(e.target.value)}
+                  />
+                  <button className="btn btn-xs btn-success px-1" onClick={() => saveEditField("sn", dmiInfo.serial_number_offset)}>💾</button>
+                  <button className="btn btn-xs btn-ghost px-1" onClick={cancelEditField}>✕</button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-1.5 justify-end">
+                  <span className="font-mono font-semibold select-text text-right">{dmiInfo.serial_number}</span>
+                  {dmiInfo.serial_number !== "Not Found" && (
+                    <div className="flex gap-0.5">
+                      <button 
+                        className="btn btn-xs btn-ghost p-1 opacity-50 hover:opacity-100 text-info" 
+                        onClick={() => startEditField("sn", dmiInfo.serial_number)}
+                        title="Edit Serial Number manual"
+                      >
+                        ✏️
+                      </button>
+                      <button 
+                        className={`btn btn-xs btn-ghost p-1 ${copiedField === "sn" ? "text-success" : "opacity-50 hover:opacity-100"}`} 
+                        onClick={() => copyToClipboard(dmiInfo.serial_number, "sn")}
+                        title="Copy to clipboard"
+                      >
+                        {copiedField === "sn" ? "✓" : "📋"}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-between items-center border-b border-base-content/5 pb-1.5 h-7">
               {/* HP Specific: Board ID */}
               {dmiInfo.brand === "HP" && dmiInfo.board_id !== "Not Found" && (
-                <div className="flex justify-between items-center border-b border-base-content/5 pb-1.5">
+                <>
                   <div className="flex items-center gap-2">
                     <span className="w-4 text-center opacity-70">⚙️</span>
                     <span className="opacity-70 text-warning font-semibold">HP Board ID (BID):</span>
@@ -1244,12 +1250,12 @@ ${diagnosticError.context || "No raw context"}
                       </div>
                     </div>
                   )}
-                </div>
+                </>
               )}
 
               {/* Dell Specific: Service Tag */}
               {dmiInfo.brand === "Dell" && dmiInfo.service_tag !== "Not Found" && (
-                <div className="flex justify-between items-center border-b border-base-content/5 pb-1.5">
+                <>
                   <div className="flex items-center gap-2">
                     <span className="w-4 text-center opacity-70">🏷️</span>
                     <span className="opacity-70 text-info font-semibold">Dell Service Tag:</span>
@@ -1286,19 +1292,20 @@ ${diagnosticError.context || "No raw context"}
                       </div>
                     </div>
                   )}
-                </div>
+                </>
               )}
 
               {dmiInfo.brand !== "HP" && dmiInfo.brand !== "Dell" && (
-                <div className="flex justify-between items-center border-b border-base-content/5 pb-1.5">
+                <>
                   <div className="flex items-center gap-2">
                     <span className="w-4 text-center opacity-70">🏷️</span>
                     <span className="opacity-70">Tag/BID Status:</span>
                   </div>
                   <span className="opacity-40 italic text-right">Not Required</span>
-                </div>
+                </>
               )}
             </div>
+
           </div>
 
           {/* Intel ME Region Status Panel */}
@@ -1530,7 +1537,7 @@ ${diagnosticError.context || "No raw context"}
             <h3 className="text-lg font-bold flex items-center gap-2">
               🔧 Megapass Service HP & Laptop Sidoarjo
             </h3>
-            <p className="text-xs opacity-60 mt-1">Version 2.1.8 (Tauri Professional Edition)</p>
+            <p className="text-xs opacity-60 mt-1">Version 2.1.9 (Tauri Professional Edition)</p>
             
             <div className="my-6 flex flex-col items-center justify-center py-6 border border-dashed border-base-content/20 rounded-lg bg-base-300">
               <div className="w-24 h-24 rounded-xl bg-primary/10 flex items-center justify-center border border-primary/20 text-primary font-bold text-center text-xs p-2 select-none">

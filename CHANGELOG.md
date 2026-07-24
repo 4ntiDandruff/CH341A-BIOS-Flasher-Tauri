@@ -2,6 +2,10 @@
 
 Semua catatan perubahan penting pada proyek **BIOS Flasher** milik Megapass Sidoarjo akan dicatat di file ini secara berkala.
 
+## [2.1.9] - 2026-07-24
+### Fixed
+- **DMI Card Alignment:** Unified grid system forcing row height (h-7) parity between columns. No more independent column height drift.
+
 ## [2.1.8] - 2026-07-24
 ### Fixed
 - **Right Pane Layout:** Lock layout atas (Search, DMI Card, ME Panel) agar  sehingga tidak tertekan (squeezed) atau tidak proporsional saat data BIOS termuat ke buffer.
