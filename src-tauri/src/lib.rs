@@ -855,15 +855,56 @@ fn get_chip_info(chip: String, app_handle: tauri::AppHandle) -> Result<serde_jso
 // 1. Overwrite DMI value in binary at exact offset
 #[tauri::command]
 fn overwrite_dmi_value(mut data: Vec<u8>, offset: usize, new_value: String) -> Result<Vec<u8>, String> {
-    if offset == 0 || offset >= data.len() {
+    if offset >= data.len() {
         return Err("Invalid offset position".to_string());
     }
-    let bytes = new_value.into_bytes();
-    for (i, &b) in bytes.iter().enumerate() {
-        if offset + i < data.len() {
-            data[offset + i] = b;
+    
+    let mut original_len = 0;
+    let mut pad_char = 0x00; // Default to null byte
+    
+    let mut i = 0;
+    while offset + i < data.len() {
+        let b = data[offset + i];
+        // 0x21..=0x7E are non-space printable characters
+        if b.is_ascii() && (0x21..=0x7E).contains(&b) {
+            original_len += 1;
+            i += 1;
+        } else {
+            break;
         }
     }
+    
+    // Check if trailing bytes are spaces (0x20) or null bytes (0x00)
+    let mut check_idx = offset + original_len;
+    while check_idx < data.len() {
+        let b = data[check_idx];
+        if b == 0x20 {
+            pad_char = 0x20;
+            original_len += 1;
+            check_idx += 1;
+        } else if b == 0x00 {
+            original_len += 1;
+            check_idx += 1;
+        } else {
+            break;
+        }
+    }
+    
+    let bytes = new_value.into_bytes();
+    for (idx, &b) in bytes.iter().enumerate() {
+        if offset + idx < data.len() {
+            data[offset + idx] = b;
+        }
+    }
+    
+    if original_len > bytes.len() {
+        for idx in bytes.len()..original_len {
+            if offset + idx < data.len() {
+                data[offset + idx] = pad_char;
+            }
+        }
+    }
+    
     Ok(data)
 }
 
@@ -951,5 +992,26 @@ mod compare_tests {
         assert_eq!(r.diff_offsets.len(), 1000);
         assert!(r.sample_capped);
         assert_eq!(r.first_offset, Some(0));
+    }
+
+    #[test]
+    fn test_overwrite_shorter_with_null_padding() {
+        let data = vec![65, 66, 67, 68, 0, 17, 34]; // ABCD 
+        let r = overwrite_dmi_value(data, 0, "XY".to_string()).unwrap();
+        assert_eq!(r, vec![88, 89, 0, 0, 0, 17, 34]); // XY   
+    }
+
+    #[test]
+    fn test_overwrite_shorter_with_space_padding() {
+        let data = vec![65, 66, 67, 68, 32, 17]; // ABCD[space]
+        let r = overwrite_dmi_value(data, 0, "XYZ".to_string()).unwrap();
+        assert_eq!(r, vec![88, 89, 90, 32, 32, 17]); // XYZ[space][space]
+    }
+
+    #[test]
+    fn test_overwrite_longer() {
+        let data = vec![65, 66, 0, 17];
+        let r = overwrite_dmi_value(data, 0, "XYZ".to_string()).unwrap();
+        assert_eq!(r, vec![88, 89, 90, 17]);
     }
 }
