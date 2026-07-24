@@ -485,7 +485,7 @@ fn analyze_me_region(data: Vec<u8>) -> serde_json::Value {
 }
 
 #[tauri::command]
-fn clean_me_region(data: Vec<u8>) -> Result<Vec<u8>, DiagnosticError> {
+fn clean_me_region(data: Vec<u8>, mode: String, app_handle: tauri::AppHandle) -> Result<Vec<u8>, DiagnosticError> {
     if data.is_empty() {
         return Err(diagnose_err!(
             "ERR_ME_EMPTY_BUFFER_0x301",
@@ -494,6 +494,77 @@ fn clean_me_region(data: Vec<u8>) -> Result<Vec<u8>, DiagnosticError> {
         ));
     }
 
+    if mode == "python" {
+        // Run me_cleaner.py script
+        let id = std::process::id();
+        let temp_in = format!("/tmp/me_cleaner_in_{}.bin", id);
+        let temp_out = format!("/tmp/me_cleaner_out_{}.bin", id);
+
+        if let Err(e) = fs::write(&temp_in, &data) {
+            return Err(diagnose_err!(
+                "ERR_ME_WRITE_TEMP_0x303",
+                "Failed to write temp ME file",
+                e.to_string()
+            ));
+        }
+
+        // Find me_cleaner.py path
+        let mut script_path = format!("{}/proyek/CH341A-programer/src-tauri/resources/me_cleaner.py", std::env::var("HOME").unwrap_or_else(|_| "/root".to_string()));
+        if let Ok(res_dir) = app_handle.path().resource_dir() {
+            let p = res_dir.join("resources").join("me_cleaner.py");
+            if p.exists() {
+                script_path = p.to_string_lossy().to_string();
+            } else {
+                let p2 = res_dir.join("me_cleaner.py");
+                if p2.exists() {
+                    script_path = p2.to_string_lossy().to_string();
+                }
+            }
+        }
+
+        let output = Command::new("python3")
+            .args([&script_path, &temp_in, "-O", &temp_out])
+            .output();
+
+        let _ = fs::remove_file(&temp_in);
+
+        match output {
+            Ok(out) => {
+                let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+                let stderr = String::from_utf8_lossy(&out.stderr).to_string();
+                let combined = format!("{}\n{}", stdout, stderr);
+
+                if out.status.success() {
+                    let cleaned = fs::read(&temp_out).map_err(|e| {
+                        diagnose_err!(
+                            "ERR_ME_READ_CLEANED_0x304",
+                            "Failed to read cleaned ME file",
+                            e.to_string()
+                        )
+                    });
+                    let _ = fs::remove_file(&temp_out);
+                    return cleaned;
+                } else {
+                    let _ = fs::remove_file(&temp_out);
+                    return Err(diagnose_err!(
+                        "ERR_ME_PYTHON_FAIL_0x305",
+                        "me_cleaner.py failed execution",
+                        combined.trim().to_string()
+                    ));
+                }
+            }
+            Err(e) => {
+                let _ = fs::remove_file(&temp_out);
+                return Err(diagnose_err!(
+                    "ERR_ME_SPAWN_PYTHON_0x306",
+                    "Failed to execute python3 for me_cleaner",
+                    e.to_string()
+                ));
+            }
+        }
+    }
+
+    // Default mode: "flag" (status byte reset)
     let mut output_data = data.clone();
     if let Some(pos) = output_data.windows(4).position(|w| w == b"$FPT") {
         let state_offset = pos + 16;
@@ -510,16 +581,20 @@ fn clean_me_region(data: Vec<u8>) -> Result<Vec<u8>, DiagnosticError> {
     ))
 }
 
+
 #[tauri::command]
 fn extract_dmi_and_key(data: Vec<u8>) -> serde_json::Value {
     let mut win_key = "Not Found".to_string();
+    let mut win_key_offset = 0;
     let mut brand = "Unknown".to_string();
     let mut model = "Unknown".to_string();
     let mut serial_num = "Not Found".to_string();
+    let mut serial_offset = 0;
     let mut board_id = "Not Found".to_string();
+    let mut board_id_offset = 0;
     let mut service_tag = "Not Found".to_string();
+    let mut service_tag_offset = 0;
 
-    // 1. Extract Windows Key from MSDM
     if let Some(pos) = data.windows(4).position(|w| w == b"MSDM") {
         let start = pos;
         let end = std::cmp::min(data.len(), pos + 120);
@@ -528,11 +603,11 @@ fn extract_dmi_and_key(data: Vec<u8>) -> serde_json::Value {
             let re_key = Regex::new(r"[A-Z0-9]{5}-[A-Z0-9]{5}-[A-Z0-9]{5}-[A-Z0-9]{5}-[A-Z0-9]{5}").unwrap();
             if let Some(mat) = re_key.find(&text) {
                 win_key = mat.as_str().to_string();
+                win_key_offset = pos + text.find(&win_key).unwrap_or(0);
             }
         }
     }
 
-    // Convert printable ASCII chars, ignoring wide spaces/nulls
     let mut ascii_chars = Vec::new();
     for &b in &data {
         if b.is_ascii() && (0x20..=0x7E).contains(&b) {
@@ -541,66 +616,58 @@ fn extract_dmi_and_key(data: Vec<u8>) -> serde_json::Value {
             ascii_chars.push(' ');
         }
     }
-    
     let raw_text: String = ascii_chars.into_iter().collect();
-    
-    // Compress multiple spaces into one single space
     let re_spaces = Regex::new(r"\s+").unwrap();
     let clean_text = re_spaces.replace_all(&raw_text, " ");
     let upper_text = clean_text.to_uppercase();
 
-    // 2. Identify Brand
-    if upper_text.contains("LENOVO") {
-        brand = "Lenovo".to_string();
-    } else if upper_text.contains("ASUSTEK") || upper_text.contains("ASUS") {
-        brand = "ASUS".to_string();
-    } else if upper_text.contains("HEWLETT-PACKARD") || upper_text.contains("HP ") || upper_text.contains("HP.") {
-        brand = "HP".to_string();
-    } else if upper_text.contains("DELL") {
-        brand = "Dell".to_string();
-    } else if upper_text.contains("ACER") {
-        brand = "Acer".to_string();
-    } else if upper_text.contains("TOSHIBA") {
-        brand = "Toshiba".to_string();
-    } else if upper_text.contains("GIGABYTE") {
-        brand = "Gigabyte".to_string();
-    } else if upper_text.contains("MSI") {
-        brand = "MSI".to_string();
-    }
+    if upper_text.contains("LENOVO") { brand = "Lenovo".to_string(); }
+    else if upper_text.contains("ASUSTEK") || upper_text.contains("ASUS") { brand = "ASUS".to_string(); }
+    else if upper_text.contains("HEWLETT-PACKARD") || upper_text.contains("HP ") || upper_text.contains("HP.") { brand = "HP".to_string(); }
+    else if upper_text.contains("DELL") { brand = "Dell".to_string(); }
+    else if upper_text.contains("ACER") { brand = "Acer".to_string(); }
+    else if upper_text.contains("TOSHIBA") { brand = "Toshiba".to_string(); }
+    else if upper_text.contains("GIGABYTE") { brand = "Gigabyte".to_string(); }
+    else if upper_text.contains("MSI") { brand = "MSI".to_string(); }
 
-    // 3. Extract Board ID / BID (HP)
+    let find_field_offset = |raw_data: &[u8], field_val: &str| -> usize {
+        if field_val.is_empty() || field_val == "Not Found" { return 0; }
+        let bytes = field_val.as_bytes();
+        raw_data.windows(bytes.len()).position(|w| w == bytes).unwrap_or(0)
+    };
+
     let re_bid = Regex::new(r"(?i)BID([0-9A-F]{4,6})").unwrap();
     if let Some(cap) = re_bid.captures(&clean_text) {
         board_id = cap.get(1).map(|m| m.as_str().to_string()).unwrap_or_default();
+        board_id_offset = find_field_offset(&data, &board_id);
     }
 
-    // 4. Extract Dell Service Tag (exactly 7 alphanumeric chars, validated with DELL signature)
     if brand == "Dell" {
         let re_svctag = Regex::new(r"\b([A-Z0-9]{7})\b").unwrap();
         for cap in re_svctag.captures_iter(&clean_text) {
             let tag = cap.get(1).unwrap().as_str().to_string();
             if !tag.contains("SERVICE") && !tag.contains("VERSION") {
                 service_tag = tag;
+                service_tag_offset = find_field_offset(&data, &service_tag);
                 break;
             }
         }
     }
 
-    // 5. Extract Serial Number
     let re_sn = Regex::new(r"(?i)(?:serial\s*number|s/n|system\s*serial|serial\s*no|prodn)\s*[:=]?\s*([A-Z0-9]{8,20})").unwrap();
     if let Some(cap) = re_sn.captures(&clean_text) {
         serial_num = cap.get(1).map(|m| m.as_str().to_string()).unwrap_or_default();
+        serial_offset = find_field_offset(&data, &serial_num);
     }
 
-    // HP Specific Serial Number Fallback
     if serial_num == "Not Found" && brand == "HP" {
         let re_hp_sn = Regex::new(r"\b(5CG|5CD|CND|CNU|5CB)[A-Z0-9]{7}\b").unwrap();
         if let Some(cap) = re_hp_sn.find(&clean_text) {
             serial_num = cap.as_str().to_string();
+            serial_offset = find_field_offset(&data, &serial_num);
         }
     }
 
-    // 6. Extract Model Name based on Brand
     if brand == "Lenovo" {
         let re_lenovo = Regex::new(r"(?i)(ThinkPad|IdeaPad|Yoga)\s+[A-Z0-9]{2,10}(?:\s+[A-Z0-9]{2,10})?").unwrap();
         if let Some(cap) = re_lenovo.find(&clean_text) {
@@ -627,11 +694,16 @@ fn extract_dmi_and_key(data: Vec<u8>) -> serde_json::Value {
         "brand": brand,
         "model": model,
         "windows_key": win_key,
+        "windows_key_offset": win_key_offset,
         "serial_number": serial_num,
+        "serial_number_offset": serial_offset,
         "board_id": board_id,
-        "service_tag": service_tag
+        "board_id_offset": board_id_offset,
+        "service_tag": service_tag,
+        "service_tag_offset": service_tag_offset
     })
 }
+
 
 #[tauri::command]
 async fn write_bios(chip: String, data: Vec<u8>, window: tauri::Window) -> Result<String, String> {
@@ -780,6 +852,21 @@ fn get_chip_info(chip: String, app_handle: tauri::AppHandle) -> Result<serde_jso
     }))
 }
 
+// 1. Overwrite DMI value in binary at exact offset
+#[tauri::command]
+fn overwrite_dmi_value(mut data: Vec<u8>, offset: usize, new_value: String) -> Result<Vec<u8>, String> {
+    if offset == 0 || offset >= data.len() {
+        return Err("Invalid offset position".to_string());
+    }
+    let bytes = new_value.into_bytes();
+    for (i, &b) in bytes.iter().enumerate() {
+        if offset + i < data.len() {
+            data[offset + i] = b;
+        }
+    }
+    Ok(data)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -801,6 +888,7 @@ pub fn run() {
             compare_bios_diff,
             analyze_me_region,
             clean_me_region,
+            overwrite_dmi_value,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

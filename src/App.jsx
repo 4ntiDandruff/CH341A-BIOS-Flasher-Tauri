@@ -245,6 +245,66 @@ export default function App() {
   const [newBiosName, setNewBiosName] = useState("");
   
   const [diffOffsets, setDiffOffsets] = useState([]);
+  // DMI inline manual edit mode states & handle
+  const [editingField, setEditingField] = useState(""); // "sn" | "winKey" | "bid" | "svctag"
+  const [editValue, setEditValue] = useState("");
+  const [meCleanMode, setMeCleanMode] = useState("flag"); // "flag" | "python"
+  const [showMeCleanModal, setShowMeCleanModal] = useState(false);
+
+  const startEditField = (field, currentVal) => {
+    setEditingField(field);
+    setEditValue(currentVal);
+  };
+
+  const cancelEditField = () => {
+    setEditingField("");
+    setEditValue("");
+  };
+
+  const saveEditField = async (field, offset) => {
+    if (!offset || offset === 0) {
+      appendLog("⚠️ Gagal edit: Lokasi offset data tidak ditemukan di file BIOS.");
+      setEditingField("");
+      return;
+    }
+    if (!editValue || editValue.trim() === "") {
+      appendLog("⚠️ Gagal: Nilai baru tidak boleh kosong.");
+      return;
+    }
+
+    try {
+      appendLog(`✍️ Mengubah byte DMI [${field}] pada offset 0x${offset.toString(16).toUpperCase()} ke: "${editValue.trim()}"`);
+      const result = await invoke("overwrite_dmi_value", {
+        data: Array.from(buffer),
+        offset: offset,
+        newValue: editValue.trim()
+      });
+      const bytes = new Uint8Array(result);
+      setBuffer(bytes);
+      
+      // Update local state details
+      setDmiInfo(prev => {
+        const next = { ...prev };
+        if (field === "sn") next.serial_number = editValue.trim();
+        if (field === "winKey") next.windows_key = editValue.trim();
+        if (field === "bid") next.board_id = editValue.trim();
+        if (field === "svctag") next.service_tag = editValue.trim();
+        return next;
+      });
+
+      // Jump Hex Viewer directly to modified offset for verification
+      setSearchResultIdx(offset);
+      setSearchLen(editValue.trim().length);
+
+      appendLog(`✅ DMI [${field}] berhasil diubah di buffer RAM!`);
+      playSound("success");
+      setEditingField("");
+    } catch (e) {
+      appendLog(`❌ Gagal edit DMI: ${e}`);
+      playSound("error");
+    }
+  };
+
   const [comparisonTargetName, setComparisonTargetName] = useState("");
 
   // Intel ME Region Cleaner states
@@ -750,26 +810,34 @@ ${diagnosticError.context || "No raw context"}
     }
   };
 
-  // Intel ME Region Clean
+  // Intel ME Region Clean with option selection
   const handleCleanMeRegion = async () => {
     if (!buffer || buffer.length === 0) return;
-    if (!window.confirm("🧹 Clean Intel ME Region?\nThis resets ME initialized state back to factory unconfigured state to fix late-display issues.")) return;
+    setShowMeCleanModal(true);
+  };
+
+  const executeMeClean = async () => {
+    setShowMeCleanModal(false);
     try {
-      appendLog("🧹 Resetting/Cleaning Intel ME Region header state...");
-      const result = await invoke("clean_me_region", { data: Array.from(buffer) });
+      appendLog(`🧹 Resetting/Cleaning Intel ME Region via [${meCleanMode === "python" ? "me_cleaner.py" : "Reset Flag Cepat"}]...`);
+      const result = await invoke("clean_me_region", {
+        data: Array.from(buffer),
+        mode: meCleanMode
+      });
       const bytes = new Uint8Array(result);
       setBuffer(bytes);
-      appendLog("✅ Intel ME Region cleaned successfully! Reloaded state to buffer.");
-      playSound('success');
-      
+      appendLog(`✅ Intel ME Region cleaned successfully via [${meCleanMode === "python" ? "me_cleaner.py" : "Reset Flag"}]!`);
+      playSound("success");
+
       const me = await invoke("analyze_me_region", { data: Array.from(bytes) });
       setMeInfo(me);
     } catch (e) {
       setDiagnosticError(e);
       appendLog(`❌ ME Region Clean failed: ${e.message || e}`);
-      playSound('error');
+      playSound("error");
     }
   };
+
 
   async function handleWrite() {
     if (!(await runPreflight({ needBuffer: true, opLabel: "Write" }))) return;
@@ -1026,18 +1094,40 @@ ${diagnosticError.context || "No raw context"}
               
               <div className="flex justify-between items-center border-b border-base-content/5 pb-1">
                 <span className="opacity-70">📋 Serial Number:</span>
-                <div className="flex items-center gap-1.5">
-                  <span className="font-mono font-semibold select-text">{dmiInfo.serial_number}</span>
-                  {dmiInfo.serial_number !== "Not Found" && (
-                    <button 
-                      className={`btn btn-xs btn-ghost p-1 ${copiedField === "sn" ? "text-success" : "opacity-50 hover:opacity-100"}`} 
-                      onClick={() => copyToClipboard(dmiInfo.serial_number, "sn")}
-                      title="Copy to clipboard"
-                    >
-                      {copiedField === "sn" ? "✓" : "📋"}
-                    </button>
-                  )}
-                </div>
+                {editingField === "sn" ? (
+                  <div className="flex items-center gap-1.5">
+                    <input 
+                      type="text" 
+                      className="input input-bordered input-xs font-mono w-28 focus:input-primary"
+                      value={editValue}
+                      onChange={(e) => setEditValue(e.target.value)}
+                    />
+                    <button className="btn btn-xs btn-success px-1" onClick={() => saveEditField("sn", dmiInfo.serial_number_offset)}>💾</button>
+                    <button className="btn btn-xs btn-ghost px-1" onClick={cancelEditField}>✕</button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-mono font-semibold select-text">{dmiInfo.serial_number}</span>
+                    {dmiInfo.serial_number !== "Not Found" && (
+                      <>
+                        <button 
+                          className="btn btn-xs btn-ghost p-1 opacity-50 hover:opacity-100 text-info" 
+                          onClick={() => startEditField("sn", dmiInfo.serial_number)}
+                          title="Edit Serial Number manual"
+                        >
+                          ✏️
+                        </button>
+                        <button 
+                          className={`btn btn-xs btn-ghost p-1 ${copiedField === "sn" ? "text-success" : "opacity-50 hover:opacity-100"}`} 
+                          onClick={() => copyToClipboard(dmiInfo.serial_number, "sn")}
+                          title="Copy to clipboard"
+                        >
+                          {copiedField === "sn" ? "✓" : "📋"}
+                        </button>
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -1052,34 +1142,76 @@ ${diagnosticError.context || "No raw context"}
               
               <div className="flex justify-between items-center border-b border-base-content/5 pb-1">
                 <span className="opacity-70">🔑 Windows Key:</span>
-                <div className="flex items-center gap-1.5">
-                  <span className="font-mono font-bold text-primary select-text">{dmiInfo.windows_key}</span>
-                  {dmiInfo.windows_key !== "Not Found" && (
-                    <button 
-                      className={`btn btn-xs btn-ghost p-1 ${copiedField === "winKey" ? "text-success" : "opacity-50 hover:opacity-100"}`} 
-                      onClick={() => copyToClipboard(dmiInfo.windows_key, "winKey")}
-                      title="Copy to clipboard"
-                    >
-                      {copiedField === "winKey" ? "✓" : "📋"}
-                    </button>
-                  )}
-                </div>
+                {editingField === "winKey" ? (
+                  <div className="flex items-center gap-1.5">
+                    <input 
+                      type="text" 
+                      className="input input-bordered input-xs font-mono w-28 focus:input-primary"
+                      value={editValue}
+                      onChange={(e) => setEditValue(e.target.value)}
+                    />
+                    <button className="btn btn-xs btn-success px-1" onClick={() => saveEditField("winKey", dmiInfo.windows_key_offset)}>💾</button>
+                    <button className="btn btn-xs btn-ghost px-1" onClick={cancelEditField}>✕</button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-mono font-bold text-primary select-text">{dmiInfo.windows_key}</span>
+                    {dmiInfo.windows_key !== "Not Found" && (
+                      <>
+                        <button 
+                          className="btn btn-xs btn-ghost p-1 opacity-50 hover:opacity-100 text-info" 
+                          onClick={() => startEditField("winKey", dmiInfo.windows_key)}
+                          title="Edit Windows Key manual"
+                        >
+                          ✏️
+                        </button>
+                        <button 
+                          className={`btn btn-xs btn-ghost p-1 ${copiedField === "winKey" ? "text-success" : "opacity-50 hover:opacity-100"}`} 
+                          onClick={() => copyToClipboard(dmiInfo.windows_key, "winKey")}
+                          title="Copy to clipboard"
+                        >
+                          {copiedField === "winKey" ? "✓" : "📋"}
+                        </button>
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* HP Specific: Board ID */}
               {dmiInfo.brand === "HP" && dmiInfo.board_id !== "Not Found" && (
                 <div className="flex justify-between items-center border-b border-base-content/5 pb-1">
                   <span className="opacity-70 text-warning font-semibold">⚙️ HP Board ID (BID):</span>
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-mono font-bold text-warning select-text">{dmiInfo.board_id}</span>
-                    <button 
-                      className={`btn btn-xs btn-ghost p-1 ${copiedField === "bid" ? "text-success" : "opacity-50 hover:opacity-100"}`} 
-                      onClick={() => copyToClipboard(dmiInfo.board_id, "bid")}
-                      title="Copy to clipboard"
-                    >
-                      {copiedField === "bid" ? "✓" : "📋"}
-                    </button>
-                  </div>
+                  {editingField === "bid" ? (
+                    <div className="flex items-center gap-1.5">
+                      <input 
+                        type="text" 
+                        className="input input-bordered input-xs font-mono w-20 focus:input-primary"
+                        value={editValue}
+                        onChange={(e) => setEditValue(e.target.value)}
+                      />
+                      <button className="btn btn-xs btn-success px-1" onClick={() => saveEditField("bid", dmiInfo.board_id_offset)}>💾</button>
+                      <button className="btn btn-xs btn-ghost px-1" onClick={cancelEditField}>✕</button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-mono font-bold text-warning select-text">{dmiInfo.board_id}</span>
+                      <button 
+                        className="btn btn-xs btn-ghost p-1 opacity-50 hover:opacity-100 text-info" 
+                        onClick={() => startEditField("bid", dmiInfo.board_id)}
+                        title="Edit HP Board ID manual"
+                      >
+                        ✏️
+                      </button>
+                      <button 
+                        className={`btn btn-xs btn-ghost p-1 ${copiedField === "bid" ? "text-success" : "opacity-50 hover:opacity-100"}`} 
+                        onClick={() => copyToClipboard(dmiInfo.board_id, "bid")}
+                        title="Copy to clipboard"
+                      >
+                        {copiedField === "bid" ? "✓" : "📋"}
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -1087,16 +1219,36 @@ ${diagnosticError.context || "No raw context"}
               {dmiInfo.brand === "Dell" && dmiInfo.service_tag !== "Not Found" && (
                 <div className="flex justify-between items-center border-b border-base-content/5 pb-1">
                   <span className="opacity-70 text-info font-semibold">🏷️ Dell Service Tag:</span>
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-mono font-bold text-info select-text">{dmiInfo.service_tag}</span>
-                    <button 
-                      className={`btn btn-xs btn-ghost p-1 ${copiedField === "svctag" ? "text-success" : "opacity-50 hover:opacity-100"}`} 
-                      onClick={() => copyToClipboard(dmiInfo.service_tag, "svctag")}
-                      title="Copy to clipboard"
-                    >
-                      {copiedField === "svctag" ? "✓" : "📋"}
-                    </button>
-                  </div>
+                  {editingField === "svctag" ? (
+                    <div className="flex items-center gap-1.5">
+                      <input 
+                        type="text" 
+                        className="input input-bordered input-xs font-mono w-20 focus:input-primary"
+                        value={editValue}
+                        onChange={(e) => setEditValue(e.target.value)}
+                      />
+                      <button className="btn btn-xs btn-success px-1" onClick={() => saveEditField("svctag", dmiInfo.service_tag_offset)}>💾</button>
+                      <button className="btn btn-xs btn-ghost px-1" onClick={cancelEditField}>✕</button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-mono font-bold text-info select-text">{dmiInfo.service_tag}</span>
+                      <button 
+                        className="btn btn-xs btn-ghost p-1 opacity-50 hover:opacity-100 text-info" 
+                        onClick={() => startEditField("svctag", dmiInfo.service_tag)}
+                        title="Edit Dell Service Tag manual"
+                      >
+                        ✏️
+                      </button>
+                      <button 
+                        className={`btn btn-xs btn-ghost p-1 ${copiedField === "svctag" ? "text-success" : "opacity-50 hover:opacity-100"}`} 
+                        onClick={() => copyToClipboard(dmiInfo.service_tag, "svctag")}
+                        title="Copy to clipboard"
+                      >
+                        {copiedField === "svctag" ? "✓" : "📋"}
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -1267,6 +1419,61 @@ ${diagnosticError.context || "No raw context"}
                   {copiedDiagnostic ? "✓ Diagnostic Copied!" : "📋 Copy Diagnostic for AI"}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Intel ME Region Clean Option Modal */}
+      {showMeCleanModal && (
+        <div className="modal modal-open">
+          <div className="modal-box relative border border-base-content/10 bg-base-200 max-w-sm">
+            <button 
+              className="btn btn-sm btn-circle absolute right-2 top-2"
+              onClick={() => setShowMeCleanModal(false)}
+            >✕</button>
+            <h3 className="text-md font-bold flex items-center gap-2 text-warning">
+              🧹 Pembersihan ME Region
+            </h3>
+            <p className="text-[10px] opacity-60 mt-1">Mengatasi late display atau mati tiap 30 menit akibat BIOS donor.</p>
+            
+            <div className="py-4 space-y-3">
+              <div className="form-control bg-base-300 p-2.5 rounded-lg border border-base-content/5">
+                <label className="label c‍ursor-pointer justify-start gap-3">
+                  <input 
+                    type="radio" 
+                    name="me-clean-mode" 
+                    className="radio radio-warning radio-sm"
+                    checked={meCleanMode === "flag"}
+                    onChange={() => setMeCleanMode("flag")}
+                  />
+                  <div>
+                    <span className="label-text font-bold text-xs">Reset Flag Cepat (Default)</span>
+                    <p className="text-[9px] opacity-50">Mengubah byte status $FPT. Cocok untuk laptop lama/TXE.</p>
+                  </div>
+                </label>
+              </div>
+
+              <div className="form-control bg-base-300 p-2.5 rounded-lg border border-base-content/5">
+                <label className="label c‍ursor-pointer justify-start gap-3">
+                  <input 
+                    type="radio" 
+                    name="me-clean-mode" 
+                    className="radio radio-warning radio-sm"
+                    checked={meCleanMode === "python"}
+                    onChange={() => setMeCleanMode("python")}
+                  />
+                  <div>
+                    <span className="label-text font-bold text-xs">Gunakan me_cleaner.py (Rekomendasi)</span>
+                    <p className="text-[9px] opacity-50">Sunat partisi ME region secara mendalam. Rekomendasi Intel Gen 6 ke atas.</p>
+                  </div>
+                </label>
+              </div>
+            </div>
+
+            <div className="modal-action gap-2">
+              <button className="btn btn-ghost btn-sm" onClick={() => setShowMeCleanModal(false)}>Batal</button>
+              <button className="btn btn-warning btn-sm" onClick={executeMeClean}>Jalankan Clean</button>
             </div>
           </div>
         </div>
