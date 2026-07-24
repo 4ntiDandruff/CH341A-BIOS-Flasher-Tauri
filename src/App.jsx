@@ -14,9 +14,16 @@ const MENU_ITEMS = [
   { id: 8, icon: "💉", label: "DMI Injector", direct: true },
 ];
 
-const APP_VERSION = "2.1.7";
+const APP_VERSION = "2.1.8";
 
 const INDO_CHANGELOG = [
+  {
+    version: "v2.1.8",
+    date: "2026-07-24",
+    items: [
+      "Perbaikan visual Right Pane: kunci layout atas (Search, DMI Card, ME Panel) agar flex-shrink-0 sehingga proporsi tetap kokoh saat data BIOS termuat."
+    ]
+  },
   {
     version: "v2.1.7",
     date: "2026-07-24",
@@ -1059,7 +1066,7 @@ ${diagnosticError.context || "No raw context"}
         {/* Right pane */}
         <div className="w-3/5 flex flex-col overflow-hidden">
           {/* Opsi B Search Panel */}
-          <div className="p-2 bg-base-300/80 border-b border-base-content/10 flex items-center gap-2">
+          <div className="p-2 bg-base-300/80 border-b border-base-content/10 flex items-center gap-2 flex-shrink-0">
             <input
               ref={searchInputRef}
               type="text"
@@ -1082,7 +1089,7 @@ ${diagnosticError.context || "No raw context"}
           </div>
 
           {/* Smart Card DMI & Info */}
-          <div className="p-3.5 bg-base-300/40 border-b border-base-content/10 text-xs grid grid-cols-2 gap-6 items-start">
+          <div className="p-3.5 bg-base-300/40 border-b border-base-content/10 text-xs grid grid-cols-2 gap-6 items-start flex-shrink-0">
             {/* Column 1: Device Model & Serial */}
             <div className="space-y-2.5">
               <div className="font-semibold opacity-60 uppercase tracking-wider text-[9px] flex items-center gap-2 pb-1 border-b border-base-content/10">
@@ -1296,7 +1303,7 @@ ${diagnosticError.context || "No raw context"}
 
           {/* Intel ME Region Status Panel */}
           {meInfo.found && (
-            <div className="px-3 py-2 bg-warning/10 border-b border-base-content/10 flex items-center justify-between text-xs text-warning">
+            <div className="px-3 py-2 bg-warning/10 border-b border-base-content/10 flex items-center justify-between text-xs text-warning flex-shrink-0">
               <div className="flex items-center gap-2">
                 <span>⚙️ <strong>Intel ME Region:</strong> Detected at <strong>{meInfo.offset}</strong> (Ver: {meInfo.version})</span>
                 <span className="badge badge-warning badge-sm uppercase font-bold text-[9px]">{meInfo.status}</span>
@@ -1523,7 +1530,7 @@ ${diagnosticError.context || "No raw context"}
             <h3 className="text-lg font-bold flex items-center gap-2">
               🔧 Megapass Service HP & Laptop Sidoarjo
             </h3>
-            <p className="text-xs opacity-60 mt-1">Version 2.1.7 (Tauri Professional Edition)</p>
+            <p className="text-xs opacity-60 mt-1">Version 2.1.8 (Tauri Professional Edition)</p>
             
             <div className="my-6 flex flex-col items-center justify-center py-6 border border-dashed border-base-content/20 rounded-lg bg-base-300">
               <div className="w-24 h-24 rounded-xl bg-primary/10 flex items-center justify-center border border-primary/20 text-primary font-bold text-center text-xs p-2 select-none">

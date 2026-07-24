@@ -2,6 +2,10 @@
 
 Semua catatan perubahan penting pada proyek **BIOS Flasher** milik Megapass Sidoarjo akan dicatat di file ini secara berkala.
 
+## [2.1.8] - 2026-07-24
+### Fixed
+- **Right Pane Layout:** Lock layout atas (Search, DMI Card, ME Panel) agar  sehingga tidak tertekan (squeezed) atau tidak proporsional saat data BIOS termuat ke buffer.
+
 ## [2.1.7] - 2026-07-24
 ### Changed
 - **DMI Layout Polish:** Grid layout kartu Device Identity kanan-kiri proporsional, alignment teks kiri-kanan rapi, bounding box icon seragam.
