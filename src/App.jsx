@@ -12,11 +12,20 @@ const MENU_ITEMS = [
   { id: 5, icon: "✍️", label: "Write", direct: false },
   { id: 6, icon: "✅", label: "Verify", direct: false },
   { id: 8, icon: "💉", label: "DMI Injector", direct: true },
+  { id: 9, icon: "🔍", label: "Blank Check", direct: false },
 ];
 
-const APP_VERSION = "2.1.9";
+const APP_VERSION = "2.2.0";
 
 const INDO_CHANGELOG = [
+  {
+    version: "v2.2.0",
+    date: "2026-07-24",
+    items: [
+      "Penambahan fitur Blank Check (mengetahui apakah IC benar-benar kosong).",
+      "Integrasi parser di Rust untuk mendeteksi write protect atau kegagalan erase secara biner."
+    ]
+  },
   {
     version: "v2.1.9",
     date: "2026-07-24",
@@ -620,6 +629,7 @@ ${diagnosticError.context || "No raw context"}
         case 5: await handleWrite(); break;
         case 6: await handleVerify(); break;
         case 7: await handleErase(); break;
+        case 9: await handleBlankCheck(); break;
       }
     });
   }
@@ -859,6 +869,40 @@ ${diagnosticError.context || "No raw context"}
     }
   };
 
+
+  async function handleBlankCheck() {
+    if (!chip) { appendLog("⚠️ Detect chip first!"); return; }
+    appendLog(`🔍 Menjalankan Blank Check pada chip ${chip}...`);
+    const start = performance.now();
+    try {
+      const result = await invoke("blank_check_bios", { chip });
+      const duration = formatDuration(performance.now() - start);
+      if (result === "BLANK_OK") {
+        appendLog(`✅ BLANK CHECK SUKSES: Chip benar-benar KOSONG (0xFF)! (dalam ${duration})`);
+        playSound("success");
+        await message("Chip benar-benar KOSONG (100% 0xFF).\nAman untuk ditulis.", { title: "Blank Check Sukses", kind: "info" });
+      } else {
+        appendLog(`📋 Hasil Blank Check: ${result}`);
+      }
+    } catch (e) {
+      const duration = formatDuration(performance.now() - start);
+      const errStr = typeof e === 'string' ? e : (e.message || String(e));
+      // Backend returns Err if not blank or read failed
+      if (errStr.includes("NOT_BLANK:")) {
+        appendLog(`❌ BLANK CHECK GAGAL: Chip TIDAK KOSONG! (dalam ${duration})`);
+        appendLog(`⚠️ ${errStr}`);
+        playSound("error");
+        await message(`Chip TIDAK KOSONG!
+
+${errStr.replace("NOT_BLANK:", "")}
+
+Mungkin chip terproteksi (Write Protect) atau Erase belum tuntas.`, { title: "Blank Check Gagal", kind: "warning" });
+      } else {
+        // Real connection/read error
+        throw e;
+      }
+    }
+  }
 
   async function handleWrite() {
     if (!(await runPreflight({ needBuffer: true, opLabel: "Write" }))) return;
@@ -1537,7 +1581,7 @@ ${diagnosticError.context || "No raw context"}
             <h3 className="text-lg font-bold flex items-center gap-2">
               🔧 Megapass Service HP & Laptop Sidoarjo
             </h3>
-            <p className="text-xs opacity-60 mt-1">Version 2.1.9 (Tauri Professional Edition)</p>
+            <p className="text-xs opacity-60 mt-1">Version 2.2.0 (Tauri Professional Edition)</p>
             
             <div className="my-6 flex flex-col items-center justify-center py-6 border border-dashed border-base-content/20 rounded-lg bg-base-300">
               <div className="w-24 h-24 rounded-xl bg-primary/10 flex items-center justify-center border border-primary/20 text-primary font-bold text-center text-xs p-2 select-none">

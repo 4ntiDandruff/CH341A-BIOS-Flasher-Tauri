@@ -908,6 +908,59 @@ fn overwrite_dmi_value(mut data: Vec<u8>, offset: usize, new_value: String) -> R
     Ok(data)
 }
 
+#[tauri::command]
+async fn blank_check_bios(chip: String, window: tauri::Window) -> Result<String, String> {
+    if chip.trim().is_empty() {
+        return Err("Chip name empty - Detect chip first".to_string());
+    }
+
+    let result = std::thread::spawn(move || {
+        let output_path = format!("/tmp/bios_blank_check_{}.bin", std::process::id());
+
+        let result = run_flashrom_with_progress(
+            &["-p", "ch341a_spi", "-c", &chip, "-r", &output_path],
+            &window,
+            "Reading",
+        );
+
+        match result {
+            Ok(_) => {
+                let data = fs::read(&output_path);
+                let _ = fs::remove_file(&output_path);
+                match data {
+                    Ok(bytes) => {
+                        if bytes.is_empty() {
+                            return Err("Read zero bytes from chip".to_string());
+                        }
+                        
+                        // Check if all bytes are 0xFF (standard blank flash state)
+                        // Also check for all 0x00 just in case for some rare chips, but 0xFF is standard
+                        let is_blank = bytes.iter().all(|&b| b == 0xFF);
+                        
+                        if is_blank {
+                            Ok("BLANK_OK".to_string())
+                        } else {
+                            // Find first offset that is not 0xFF
+                            let non_ff_offset = bytes.iter().position(|&b| b != 0xFF).unwrap_or(0);
+                            let non_ff_val = bytes[non_ff_offset];
+                            Err(format!("NOT_BLANK: Data found at offset 0x{:08X} (Value: 0x{:02X})", non_ff_offset, non_ff_val))
+                        }
+                    }
+                    Err(e) => Err(format!("Failed to read temp buffer: {}", e)),
+                }
+            }
+            Err(e) => {
+                let _ = fs::remove_file(&output_path);
+                Err(e)
+            }
+        }
+    })
+    .join()
+    .map_err(|_| "Thread panicked".to_string())??;
+
+    Ok(result)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -930,6 +983,7 @@ pub fn run() {
             analyze_me_region,
             clean_me_region,
             overwrite_dmi_value,
+            blank_check_bios,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

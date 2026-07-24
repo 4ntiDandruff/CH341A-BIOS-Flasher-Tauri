@@ -2,6 +2,10 @@
 
 Semua catatan perubahan penting pada proyek **BIOS Flasher** milik Megapass Sidoarjo akan dicatat di file ini secara berkala.
 
+## [2.2.0] - 2026-07-24
+### Added
+- **Blank Check Feature:** Cek apakah isi chip 100% kosong (0xFF) secara biner di backend Rust untuk memvalidasi proteksi write-protect / kegagalan erase.
+
 ## [2.1.9] - 2026-07-24
 ### Fixed
 - **DMI Card Alignment:** Unified grid system forcing row height (h-7) parity between columns. No more independent column height drift.
