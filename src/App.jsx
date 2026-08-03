@@ -15,9 +15,23 @@ const MENU_ITEMS = [
   { id: 9, icon: "🔍", label: "Blank Check", direct: false },
 ];
 
-const APP_VERSION = "2.2.0";
+const APP_VERSION = "2.2.1";
 
 const INDO_CHANGELOG = [
+  {
+    version: "v2.2.1",
+    date: "2026-08-03",
+    items: [
+      "🛡️ [PENTING] DMI Injector: dulu bisa salah tembak lokasi dan menimpa 64KB area acak sampai BIOS mati total. Sekarang lokasi DMI wajib lolos validasi struktur dulu — kalau ragu, ditolak.",
+      "⚡ [PENTING] Read, Verify, dan Blank Check sekarang ikut cek adapter 1.8V. Sebelumnya ketiganya bisa jalan langsung dan berpotensi menghanguskan chip 1.8V.",
+      "🔑 Windows Key sekarang terbaca. Sebelumnya selalu 'Not Found' karena data MSDM mengandung byte biner yang bikin pembacaan gagal diam-diam.",
+      "✏️ Edit DMI: kalau teks baru lebih panjang dari kolom aslinya sekarang ditolak dengan pesan jelas, tidak lagi menimpa data sebelahnya.",
+      "📊 Progress bar saat Read/Write/Erase sekarang bergerak beneran (dulu diam di 0% lalu lompat 100%).",
+      "🧹 ME Cleaner mode Python sekarang jalan di aplikasi terinstall (file pendukungnya dulu tidak ikut ter-install).",
+      "🚀 Diff Mode tidak lagi nge-freeze — 54x lebih cepat.",
+      "🧪 Unit test 8 → 14, termasuk test khusus agar bug-bug di atas tidak balik lagi."
+    ]
+  },
   {
     version: "v2.2.0",
     date: "2026-07-24",
@@ -1587,7 +1601,7 @@ Mungkin chip terproteksi (Write Protect) atau Erase belum tuntas.`, { title: "Bl
             <h3 className="text-lg font-bold flex items-center gap-2">
               🔧 Megapass Service HP & Laptop Sidoarjo
             </h3>
-            <p className="text-xs opacity-60 mt-1">Version 2.2.0 (Tauri Professional Edition)</p>
+            <p className="text-xs opacity-60 mt-1">Version 2.2.1 (Tauri Professional Edition)</p>
             
             <div className="my-6 flex flex-col items-center justify-center py-6 border border-dashed border-base-content/20 rounded-lg bg-base-300">
               <div className="w-24 h-24 rounded-xl bg-primary/10 flex items-center justify-center border border-primary/20 text-primary font-bold text-center text-xs p-2 select-none">

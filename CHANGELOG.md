@@ -2,6 +2,25 @@
 
 Semua catatan perubahan penting pada proyek **BIOS Flasher** milik Megapass Sidoarjo akan dicatat di file ini secara berkala.
 
+## [2.2.1] - 2026-08-03
+### Fixed — Deep Audit (8 logic bug, 2 di antaranya berisiko merusak hardware)
+- **[KRITIS] DMI Injector bisa brick BIOS:** Signature pencarian `"DMI"` cuma 3 byte, jadi cocok dengan string sampah biasa di BIOS (contoh nyata: `"DMI EDIT TOOL"`). Offset hasil salah itu dipakai untuk menyalin 64KB secara buta, sehingga region acak (bisa NVRAM/ME/descriptor) ketimpa. Sekarang hanya menerima anchor yang divalidasi strukturnya: MSDM (cek length field `0x55..0x1000`), SMBIOS `_SM_` (cek length ≥ `0x18`), dan `_DMI_` 5-byte. Kalau tidak yakin → tolak, bukan hajar.
+- **[KRITIS] Chip 1.8V berisiko hangus:** `Read`, `Verify`, dan `Blank Check` melewati pre-flight check padahal ketiganya menyalurkan tegangan ke chip. Chip 1.8V bisa terbakar kena 3.3V tanpa level shifter. Ketiganya sekarang wajib lewat `runPreflight()`.
+- **Windows Key tidak pernah terbaca:** Segment MSDM adalah ACPI table biner (ada byte checksum >0x7F), sehingga `String::from_utf8` selalu gagal dan blok pembacaan key di-skip diam-diam — hasilnya `"Not Found"` padahal key ada di buffer. Diganti `from_utf8_lossy`. Berlaku untuk DMI Extractor dan DMI Injector.
+- **Edit DMI merusak data tetangga:** `overwrite_dmi_value` menulis tanpa cek panjang, sehingga value yang lebih panjang dari field aslinya menimpa struktur BIOS setelahnya. Sekarang ditolak dengan pesan jelas berapa byte yang muat.
+- **Progress bar mati:** Progress hanya di-parse dari stderr, padahal flashrom menulis output normal ke stdout. Akibatnya bar diam di 0% lalu lompat 100% — operator tidak tahu proses jalan atau nyantol saat flash 8MB. Kedua stream sekarang di-stream & di-parse paralel.
+- **ME Cleaner mode Python selalu gagal di user:** `me_cleaner.py` tidak ikut ter-bundle, dan path fallback-nya hardcode ke folder PC developer. Sudah ditambahkan ke `resources` bundle.
+- **UI freeze di Diff Mode:** `Array.includes()` dipanggil di dalam loop 32KB × 1000 offset (~32 juta operasi tiap render). Diganti `Set.has()` — terukur **54x lebih cepat**, hasil identik.
+- **Erase tanpa guard:** `erase_bios` bisa menjalankan `flashrom -c ""` saat chip belum terdeteksi. Guard ditambahkan menyamakan dengan command lain.
+
+### Changed
+- **Unit test 8 → 14.** Test lama `test_overwrite_longer` ternyata *mengesahkan* bug penimpaan data tetangga, makanya bug itu lolos 8/8 selama berbulan-bulan. Diganti test regresi yang memisahkan kasus "pas muat" vs "overflow", plus test regresi untuk DMI signature sampah dan pembacaan key dari MSDM biner.
+
+### Verifikasi
+`cargo clippy` clean · `cargo test` 14/14 pass · `vite build` OK · `tauri build` 3 bundle OK · `me_cleaner.py` terkonfirmasi ada di dalam paket `.deb` hasil build.
+
+> ⚠️ Belum diuji dengan hardware CH341A fisik (programmer tidak tercolok saat audit). Disarankan tes Read → Backup → Compare di chip bekas sebelum dipakai ke BIOS customer.
+
 ## [2.2.0] - 2026-07-24
 ### Added
 - **Blank Check Feature:** Cek apakah isi chip 100% kosong (0xFF) secara biner di backend Rust untuk memvalidasi proteksi write-protect / kegagalan erase.
