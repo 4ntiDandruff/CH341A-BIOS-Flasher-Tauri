@@ -35,7 +35,8 @@
       "icons/icon.ico"
     ],
     "resources": [
-      "chips.json"
+      "chips.json",
+      "resources/me_cleaner.py"
     ]
   }
 }

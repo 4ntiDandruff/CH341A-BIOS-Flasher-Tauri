@@ -6,7 +6,7 @@ use std::io::{BufRead, BufReader};
 use std::process::{Command, Stdio};
 use tauri::{Emitter, Manager};
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 struct DiagnosticError {
     code: String,
     message: String,
@@ -95,19 +95,30 @@ fn run_flashrom_with_progress(
         lines.join("\n")
     });
 
-    let stdout = child
-        .stdout
-        .take()
-        .map(|s| {
-            let r = BufReader::new(s);
-            r.lines().map_while(Result::ok).collect::<Vec<_>>().join("\n")
-        })
-        .unwrap_or_default();
+    // FIX BUG-4: flashrom menulis output normal (termasuk progress) ke STDOUT.
+    // Sebelumnya stdout hanya dikumpulkan di akhir tanpa parsing progress, jadi
+    // bar diam di 0% lalu lompat 100%. Sekarang stdout di-stream & di-parse juga.
+    let stdout_pipe = child.stdout.take().ok_or("Failed to capture stdout")?;
+    let out_reader = BufReader::new(stdout_pipe);
+    let win_out = window.clone();
+    let stage_out = stage.to_string();
+    let stdout_handle = std::thread::spawn(move || {
+        let mut lines = Vec::new();
+        for line in out_reader.lines().map_while(Result::ok) {
+            if let Some(pct) = parse_progress(&line) {
+                emit_progress(&win_out, pct, &stage_out);
+            }
+            emit_log(&win_out, &line);
+            lines.push(line);
+        }
+        lines.join("\n")
+    });
 
     let status = child
         .wait()
         .map_err(|e| format!("Failed to wait for flashrom: {}", e))?;
 
+    let stdout = stdout_handle.join().unwrap_or_default();
     let stderr_output = stderr_handle.join().unwrap_or_default();
 
     emit_progress(window, 100.0, stage);
@@ -263,13 +274,41 @@ fn inject_dmi(data_old: Vec<u8>, data_new: Vec<u8>) -> Result<Vec<u8>, Diagnosti
     }
 
     let mut output_data = data_new.clone();
+
+    // FIX BUG-2: signature b"DMI" (3 byte) terlalu pendek -> cocok dengan string
+    // sampah biasa di BIOS (mis. "DMI EDIT TOOL"), lalu 64KB di-copy BUTA dari
+    // offset salah -> region acak ketimpa -> BIOS brick.
+    // Sekarang: hanya terima anchor yang tervalidasi strukturnya.
     let mut dmi_offset: Option<usize> = None;
+
+    // Anchor 1: MSDM (ACPI table). Validasi: length field masuk akal (>= 0x55).
     if let Some(pos) = data_old.windows(4).position(|w| w == b"MSDM") {
-        dmi_offset = Some((pos / 0x1000) * 0x1000);
+        if pos + 8 <= data_old.len() {
+            let len_field = u32::from_le_bytes([
+                data_old[pos + 4],
+                data_old[pos + 5],
+                data_old[pos + 6],
+                data_old[pos + 7],
+            ]);
+            if (0x55..=0x1000).contains(&len_field) {
+                dmi_offset = Some((pos / 0x1000) * 0x1000);
+            }
+        }
     }
-    
+
+    // Anchor 2: SMBIOS entry point "_SM_" / "_SM3_" — struktur nyata, bukan tebakan.
     if dmi_offset.is_none() {
-        if let Some(pos) = data_old.windows(3).position(|w| w == b"NCB" || w == b"DMI") {
+        if let Some(pos) = data_old.windows(4).position(|w| w == b"_SM_") {
+            // entry point diikuti checksum + length; length valid biasanya 0x1F/0x18
+            if pos + 6 <= data_old.len() && data_old[pos + 5] >= 0x18 {
+                dmi_offset = Some((pos / 0x1000) * 0x1000);
+            }
+        }
+    }
+
+    // Anchor 3: "_DMI_" (5 byte, SMBIOS intermediate anchor). Lebih spesifik dari "DMI".
+    if dmi_offset.is_none() {
+        if let Some(pos) = data_old.windows(5).position(|w| w == b"_DMI_") {
             dmi_offset = Some((pos / 0x1000) * 0x1000);
         }
     }
@@ -277,7 +316,8 @@ fn inject_dmi(data_old: Vec<u8>, data_new: Vec<u8>) -> Result<Vec<u8>, Diagnosti
     if let Some(offset) = dmi_offset {
         let block_size = 0x10000;
         if offset + block_size <= data_old.len() && offset + block_size <= output_data.len() {
-            output_data[offset..offset + block_size].copy_from_slice(&data_old[offset..offset + block_size]);
+            output_data[offset..offset + block_size]
+                .copy_from_slice(&data_old[offset..offset + block_size]);
             return Ok(output_data);
         }
     }
@@ -286,19 +326,24 @@ fn inject_dmi(data_old: Vec<u8>, data_new: Vec<u8>) -> Result<Vec<u8>, Diagnosti
         if let Some(new_msdm_pos) = output_data.windows(4).position(|w| w == b"MSDM") {
             let old_key_segment = &data_old[old_msdm_pos..std::cmp::min(data_old.len(), old_msdm_pos + 120)];
             let new_key_segment = &output_data[new_msdm_pos..std::cmp::min(output_data.len(), new_msdm_pos + 120)];
-            
-            if let Ok(old_text) = String::from_utf8(old_key_segment.to_vec()) {
-                let re_key = Regex::new(r"[A-Z0-9]{5}-[A-Z0-9]{5}-[A-Z0-9]{5}-[A-Z0-9]{5}-[A-Z0-9]{5}").unwrap();
-                if let Some(old_mat) = re_key.find(&old_text) {
-                    let old_key_str = old_mat.as_str();
-                    
-                    if let Ok(new_text) = String::from_utf8(new_key_segment.to_vec()) {
-                        if let Some(new_mat) = re_key.find(&new_text) {
-                            let start_replace = new_msdm_pos + new_mat.start();
-                            let end_replace = new_msdm_pos + new_mat.end();
-                            output_data[start_replace..end_replace].copy_from_slice(old_key_str.as_bytes());
-                            return Ok(output_data);
-                        }
+
+            // FIX BUG-1: segment MSDM biner -> from_utf8 selalu Err. Pakai lossy.
+            let old_text = String::from_utf8_lossy(old_key_segment).to_string();
+            let new_text = String::from_utf8_lossy(new_key_segment).to_string();
+
+            let re_key = Regex::new(r"[A-Z0-9]{5}-[A-Z0-9]{5}-[A-Z0-9]{5}-[A-Z0-9]{5}-[A-Z0-9]{5}").unwrap();
+            if let Some(old_mat) = re_key.find(&old_text) {
+                let old_key_str = old_mat.as_str();
+                if let Some(new_mat) = re_key.find(&new_text) {
+                    let start_replace = new_msdm_pos + new_mat.start();
+                    let end_replace = new_msdm_pos + new_mat.end();
+                    // guard: panjang key harus sama persis (29 byte) & dalam batas buffer
+                    if end_replace <= output_data.len()
+                        && (end_replace - start_replace) == old_key_str.len()
+                    {
+                        output_data[start_replace..end_replace]
+                            .copy_from_slice(old_key_str.as_bytes());
+                        return Ok(output_data);
                     }
                 }
             }
@@ -599,12 +644,15 @@ fn extract_dmi_and_key(data: Vec<u8>) -> serde_json::Value {
         let start = pos;
         let end = std::cmp::min(data.len(), pos + 120);
         let segment = &data[start..end];
-        if let Ok(text) = String::from_utf8(segment.to_vec()) {
-            let re_key = Regex::new(r"[A-Z0-9]{5}-[A-Z0-9]{5}-[A-Z0-9]{5}-[A-Z0-9]{5}-[A-Z0-9]{5}").unwrap();
-            if let Some(mat) = re_key.find(&text) {
-                win_key = mat.as_str().to_string();
-                win_key_offset = pos + text.find(&win_key).unwrap_or(0);
-            }
+        // FIX BUG-1: MSDM adalah ACPI table biner (checksum byte >0x7F).
+        // String::from_utf8 selalu Err -> key tidak pernah terbaca.
+        // from_utf8_lossy tetap mempertahankan posisi byte ASCII sehingga offset valid.
+        let text = String::from_utf8_lossy(segment).to_string();
+        let re_key = Regex::new(r"[A-Z0-9]{5}-[A-Z0-9]{5}-[A-Z0-9]{5}-[A-Z0-9]{5}-[A-Z0-9]{5}").unwrap();
+        if let Some(mat) = re_key.find(&text) {
+            win_key = mat.as_str().to_string();
+            // pakai offset byte hasil match langsung, bukan find() ulang
+            win_key_offset = pos + mat.start();
         }
     }
 
@@ -773,6 +821,12 @@ async fn verify_bios(
 
 #[tauri::command]
 async fn erase_bios(chip: String, window: tauri::Window) -> Result<String, String> {
+    // FIX BUG-8: command lain punya guard ini, erase_bios tidak -> bisa spawn
+    // `flashrom -c ""` dengan chip kosong.
+    if chip.trim().is_empty() {
+        return Err("Chip name empty - Detect chip first".to_string());
+    }
+
     let result = std::thread::spawn(move || {
         run_flashrom_with_progress(
             &["-p", "ch341a_spi", "-c", &chip, "-E"],
@@ -891,6 +945,18 @@ fn overwrite_dmi_value(mut data: Vec<u8>, offset: usize, new_value: String) -> R
     }
     
     let bytes = new_value.into_bytes();
+
+    // FIX BUG-3: tanpa guard ini, value lebih panjang dari field asli akan
+    // menimpa struktur BIOS tetangga (terbukti: 0xDEADBEEF ketimpa habis).
+    if bytes.len() > original_len {
+        return Err(format!(
+            "Value terlalu panjang: {} byte, field asli cuma muat {} byte. \
+             Menulis lebih panjang akan merusak struktur BIOS setelahnya.",
+            bytes.len(),
+            original_len
+        ));
+    }
+
     for (idx, &b) in bytes.iter().enumerate() {
         if offset + idx < data.len() {
             data[offset + idx] = b;
@@ -1063,9 +1129,89 @@ mod compare_tests {
     }
 
     #[test]
-    fn test_overwrite_longer() {
+    fn test_overwrite_pas_slot_diterima_tetangga_utuh() {
+        // Field slot = 'A','B',0x00 (3 byte). "XYZ" PAS muat -> boleh,
+        // dan byte tetangga 0x11 wajib tidak tersentuh.
         let data = vec![65, 66, 0, 17];
         let r = overwrite_dmi_value(data, 0, "XYZ".to_string()).unwrap();
         assert_eq!(r, vec![88, 89, 90, 17]);
+        assert_eq!(r[3], 17, "byte tetangga wajib utuh");
+    }
+
+    #[test]
+    fn test_overwrite_lebih_panjang_dari_slot_ditolak() {
+        // REGRESI BUG-3: slot cuma 3 byte, value 5 byte -> harus DITOLAK,
+        // dulu byte tetangga 0x11 ketimpa diam-diam.
+        let data = vec![65, 66, 0, 17];
+        let r = overwrite_dmi_value(data, 0, "XYZAB".to_string());
+        assert!(r.is_err(), "value melebihi slot harus ditolak");
+        assert!(r.unwrap_err().contains("terlalu panjang"));
+    }
+
+    #[test]
+    fn test_overwrite_tidak_rusak_tetangga() {
+        // REGRESI BUG-3: struktur BIOS setelah field tidak boleh tersentuh.
+        let data = vec![b'A', b'B', b'C', 0x00, 0xDE, 0xAD, 0xBE, 0xEF];
+        let r = overwrite_dmi_value(data, 0, "ABCDEFGH".to_string());
+        assert!(r.is_err(), "harus ditolak, bukan menimpa 0xDEADBEEF");
+    }
+
+    #[test]
+    fn test_overwrite_pas_panjang_field_diterima() {
+        // Panjang persis = field asli (3 char + 1 null = 4 slot) -> boleh.
+        let data = vec![b'A', b'B', b'C', 0x00, 0xDE, 0xAD];
+        let r = overwrite_dmi_value(data, 0, "XYZW".to_string()).unwrap();
+        assert_eq!(&r[0..4], b"XYZW");
+        assert_eq!(&r[4..], &[0xDE, 0xAD], "byte tetangga wajib utuh");
+    }
+
+    #[test]
+    fn test_inject_dmi_tolak_signature_sampah() {
+        // REGRESI BUG-2: string "DMI EDIT TOOL" TIDAK boleh dianggap anchor DMI.
+        let mut old = vec![0x00u8; 0x40000];
+        let junk = b"AMI BIOS SETUP UTILITY - DMI EDIT TOOL v2.1";
+        old[0x2000..0x2000 + junk.len()].copy_from_slice(junk);
+        let new = vec![0x11u8; 0x40000];
+
+        let r = inject_dmi(old, new.clone());
+        assert!(
+            r.is_err(),
+            "signature sampah 'DMI' harus ditolak, bukan copy 64KB buta"
+        );
+        assert_eq!(r.unwrap_err().code, "ERR_DMI_SIGNATURE_NOT_FOUND_0x202");
+    }
+
+    #[test]
+    fn test_inject_dmi_terima_msdm_valid() {
+        // MSDM dengan length field valid -> anchor diterima, blok 64KB disalin.
+        let mut old = vec![0x00u8; 0x40000];
+        let pos = 0x10000;
+        old[pos..pos + 4].copy_from_slice(b"MSDM");
+        old[pos + 4..pos + 8].copy_from_slice(&0x55u32.to_le_bytes());
+        old[pos + 9] = 0xB3; // checksum biner (bikin from_utf8 gagal)
+        old[pos + 20] = 0xAB; // penanda unik
+
+        let new = vec![0x11u8; 0x40000];
+        let out = inject_dmi(old, new).expect("MSDM valid harus diterima");
+        assert_eq!(out[pos + 20], 0xAB, "blok DMI lama wajib tersalin");
+    }
+
+    #[test]
+    fn test_extract_key_dari_msdm_biner() {
+        // REGRESI BUG-1: MSDM biner bikin String::from_utf8 gagal -> key hilang.
+        let mut bios = vec![0xFFu8; 8192];
+        let pos = 1000;
+        bios[pos..pos + 4].copy_from_slice(b"MSDM");
+        bios[pos + 4..pos + 8].copy_from_slice(&0x55u32.to_le_bytes());
+        bios[pos + 9] = 0xB3; // byte non-UTF8
+        let key = b"VK7JG-NPHTM-C97JM-9MPGT-3V66T";
+        bios[pos + 56..pos + 56 + key.len()].copy_from_slice(key);
+
+        let info = extract_dmi_and_key(bios);
+        assert_eq!(
+            info["windows_key"].as_str().unwrap(),
+            "VK7JG-NPHTM-C97JM-9MPGT-3V66T",
+            "key wajib terbaca walau MSDM mengandung byte biner"
+        );
     }
 }

@@ -156,6 +156,9 @@ function playSound(type) {
 
 function formatHex(bytes, highlightOffset = -1, searchLen = 0, diffOffsets = []) {
   if (!bytes || bytes.length === 0) return "No data loaded";
+  // FIX BUG-7: Array.includes() di dalam loop 32KB x 1000 offset = ~32 juta
+  // operasi tiap render -> UI freeze. Set.has() = O(1).
+  const diffSet = diffOffsets instanceof Set ? diffOffsets : new Set(diffOffsets);
   const totalSize = bytes.length;
   const totalKB = (totalSize / 1024).toFixed(0);
 
@@ -211,7 +214,7 @@ function formatHex(bytes, highlightOffset = -1, searchLen = 0, diffOffsets = [])
         const hexStr = b.toString(16).toUpperCase().padStart(2, "0");
         
         const isMatch = highlightOffset !== -1 && idx >= highlightOffset && idx < (highlightOffset + searchLen);
-        const isDiff = diffOffsets.includes(idx);
+        const isDiff = diffSet.has(idx);
         
         if (isDiff) {
           hexParts.push(`*${hexStr}*`);
@@ -666,7 +669,9 @@ ${diagnosticError.context || "No raw context"}
   }
 
   async function handleRead() {
-    if (!chip) { appendLog("⚠️ Detect chip first!"); return; }
+    // FIX BUG-6: Read juga menyalurkan tegangan ke chip. Tanpa pre-flight,
+    // chip 1.8V bisa hangus kena 3.3V. Operasi ini paling sering dipakai.
+    if (!(await runPreflight({ needBuffer: false, opLabel: "Read" }))) return;
     appendLog(`📖 Reading from ${chip}...`);
     const start = performance.now();
     const data = await invoke("read_bios", { chip });
@@ -871,7 +876,8 @@ ${diagnosticError.context || "No raw context"}
 
 
   async function handleBlankCheck() {
-    if (!chip) { appendLog("⚠️ Detect chip first!"); return; }
+    // FIX BUG-6: Blank check membaca chip -> tegangan aktif, wajib pre-flight 1.8V.
+    if (!(await runPreflight({ needBuffer: false, opLabel: "Blank Check" }))) return;
     appendLog(`🔍 Menjalankan Blank Check pada chip ${chip}...`);
     const start = performance.now();
     try {
@@ -921,8 +927,8 @@ Mungkin chip terproteksi (Write Protect) atau Erase belum tuntas.`, { title: "Bl
   }
 
   async function handleVerify() {
-    if (!chip) { appendLog("⚠️ Detect chip first!"); return; }
-    if (!buffer || buffer.length === 0) { appendLog("⚠️ No data in buffer!"); return; }
+    // FIX BUG-6: Verify juga menyalurkan tegangan ke chip -> wajib pre-flight 1.8V.
+    if (!(await runPreflight({ needBuffer: true, opLabel: "Verify" }))) return;
     appendLog(`🔄 Verifying ${chip}...`);
     const start = performance.now();
     const result = await invoke("verify_bios", { chip, data: Array.from(buffer) });
