@@ -86,6 +86,55 @@ fn unique_tmp(prefix: &str) -> String {
     format!("/tmp/{}_{}_{}.bin", prefix, std::process::id(), nanos)
 }
 
+// FIX #8 (audit ronde 6/LOW): temp BIOS di /tmp dulu dibuat 0644 (world-readable)
+// & nyangkut kalau flashrom/thread panic -> dump BIOS customer (lisensi/serial)
+// bocor + orphan. Guard ini: (1) file lahir mode 0600 (cuma owner), (2) auto
+// remove_file lewat Drop di SEMUA jalur keluar termasuk panic.
+struct TempFile {
+    path: String,
+}
+
+impl TempFile {
+    // File kosong 0600 (diisi flashrom lewat -r / python -O; fopen "wb" truncate
+    // file lama, mode 0600 tetap terjaga).
+    fn empty(prefix: &str) -> std::io::Result<TempFile> {
+        use std::os::unix::fs::OpenOptionsExt;
+        let path = unique_tmp(prefix);
+        fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .mode(0o600)
+            .open(&path)?;
+        Ok(TempFile { path })
+    }
+
+    // File 0600 langsung berisi `data` (untuk write/verify/ME input).
+    fn with_data(prefix: &str, data: &[u8]) -> std::io::Result<TempFile> {
+        use std::io::Write;
+        use std::os::unix::fs::OpenOptionsExt;
+        let path = unique_tmp(prefix);
+        let mut f = fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .mode(0o600)
+            .open(&path)?;
+        f.write_all(data)?;
+        Ok(TempFile { path })
+    }
+
+    fn path(&self) -> &str {
+        &self.path
+    }
+}
+
+impl Drop for TempFile {
+    fn drop(&mut self) {
+        let _ = fs::remove_file(&self.path);
+    }
+}
+
 fn run_flashrom_with_progress(
     args: &[&str],
     window: &tauri::Window,
@@ -242,26 +291,17 @@ fn detect_chip() -> Result<serde_json::Value, String> {
 #[tauri::command]
 async fn read_bios(chip: String, window: tauri::Window) -> Result<Vec<u8>, String> {
     let result = std::thread::spawn(move || {
-        let output_path = unique_tmp("bios_read");
+        let tmp = TempFile::empty("bios_read")
+            .map_err(|e| format!("Failed to create temp file: {}", e))?;
+        let output_path = tmp.path().to_string();
 
-        let result = run_flashrom_with_progress(
+        // tmp di-drop di akhir closure (semua jalur, termasuk panic) -> file terhapus.
+        run_flashrom_with_progress(
             &["-p", "ch341a_spi", "-c", &chip, "-r", &output_path],
             &window,
             "Reading",
-        );
-
-        match result {
-            Ok(_) => {
-                let data = fs::read(&output_path)
-                    .map_err(|e| format!("Failed to read output file: {}", e));
-                let _ = fs::remove_file(&output_path);
-                data
-            }
-            Err(e) => {
-                let _ = fs::remove_file(&output_path);
-                Err(e)
-            }
-        }
+        )?;
+        fs::read(&output_path).map_err(|e| format!("Failed to read output file: {}", e))
     })
     .join()
     .map_err(|_| "Thread panicked".to_string())??;
@@ -330,9 +370,19 @@ fn inject_dmi(data_old: Vec<u8>, data_new: Vec<u8>) -> Result<Vec<u8>, Diagnosti
     }
 
     // Anchor 3: "_DMI_" (5 byte, SMBIOS intermediate anchor). Lebih spesifik dari "DMI".
+    // FIX #DMI (audit ronde 6): dulu 5-byte cocok -> langsung dipercaya, tanpa cek
+    // struktur seperti anchor 1 (MSDM) & 2 (_SM_). "_DMI_" masih bisa muncul sebagai
+    // string sampah -> 64KB di-copy buta ke region acak. Sekarang validasi field
+    // "Structure Table Length" (WORD @ +6) harus masuk akal sebelum dipercaya.
     if dmi_offset.is_none() {
         if let Some(pos) = data_old.windows(5).position(|w| w == b"_DMI_") {
-            dmi_offset = Some((pos / 0x1000) * 0x1000);
+            if pos + 8 <= data_old.len() {
+                let table_len = u16::from_le_bytes([data_old[pos + 6], data_old[pos + 7]]);
+                // tabel SMBIOS nyata: tidak nol, tidak absurd (< 32KB).
+                if (0x20..=0x8000).contains(&table_len) {
+                    dmi_offset = Some((pos / 0x1000) * 0x1000);
+                }
+            }
         }
     }
 
@@ -563,21 +613,32 @@ fn clean_me_region(data: Vec<u8>, mode: String, app_handle: tauri::AppHandle) ->
     }
 
     if mode == "python" {
-        // Run me_cleaner.py script
-        let temp_in = unique_tmp("me_cleaner_in");
-        let temp_out = unique_tmp("me_cleaner_out");
-
-        if let Err(e) = fs::write(&temp_in, &data) {
-            // FIX #6 (audit ronde 4/LOW): dulu return langsung tanpa hapus temp_in.
-            // Kalau write gagal separuh (disk penuh), file BIOS parsial (berisi
-            // lisensi/serial customer) nyangkut di /tmp world-readable. Bersihkan.
-            let _ = fs::remove_file(&temp_in);
-            return Err(diagnose_err!(
-                "ERR_ME_WRITE_TEMP_0x303",
-                "Failed to write temp ME file",
-                e.to_string()
-            ));
-        }
+        // Run me_cleaner.py script.
+        // FIX #6+#8: temp lahir 0600 (bukan 0644) & di-drop otomatis di SEMUA jalur
+        // keluar (termasuk error/panic) -> dump BIOS parsial berisi lisensi/serial
+        // customer tidak bocor world-readable & tidak nyangkut di /tmp.
+        let tin = match TempFile::with_data("me_cleaner_in", &data) {
+            Ok(t) => t,
+            Err(e) => {
+                return Err(diagnose_err!(
+                    "ERR_ME_WRITE_TEMP_0x303",
+                    "Failed to write temp ME file",
+                    e.to_string()
+                ));
+            }
+        };
+        let tout = match TempFile::empty("me_cleaner_out") {
+            Ok(t) => t,
+            Err(e) => {
+                return Err(diagnose_err!(
+                    "ERR_ME_WRITE_TEMP_0x303",
+                    "Failed to create temp ME output",
+                    e.to_string()
+                ));
+            }
+        };
+        let temp_in = tin.path().to_string();
+        let temp_out = tout.path().to_string();
 
         // Find me_cleaner.py path
         let mut script_path = format!("{}/proyek/CH341A-programer/src-tauri/resources/me_cleaner.py", std::env::var("HOME").unwrap_or_else(|_| "/root".to_string()));
@@ -597,8 +658,7 @@ fn clean_me_region(data: Vec<u8>, mode: String, app_handle: tauri::AppHandle) ->
             .args([&script_path, &temp_in, "-O", &temp_out])
             .output();
 
-        let _ = fs::remove_file(&temp_in);
-
+        // temp_in & temp_out di-drop di akhir blok "python" -> auto-remove.
         match output {
             Ok(out) => {
                 let stdout = String::from_utf8_lossy(&out.stdout).to_string();
@@ -606,17 +666,14 @@ fn clean_me_region(data: Vec<u8>, mode: String, app_handle: tauri::AppHandle) ->
                 let combined = format!("{}\n{}", stdout, stderr);
 
                 if out.status.success() {
-                    let cleaned = fs::read(&temp_out).map_err(|e| {
+                    return fs::read(&temp_out).map_err(|e| {
                         diagnose_err!(
                             "ERR_ME_READ_CLEANED_0x304",
                             "Failed to read cleaned ME file",
                             e.to_string()
                         )
                     });
-                    let _ = fs::remove_file(&temp_out);
-                    return cleaned;
                 } else {
-                    let _ = fs::remove_file(&temp_out);
                     return Err(diagnose_err!(
                         "ERR_ME_PYTHON_FAIL_0x305",
                         "me_cleaner.py failed execution",
@@ -625,7 +682,6 @@ fn clean_me_region(data: Vec<u8>, mode: String, app_handle: tauri::AppHandle) ->
                 }
             }
             Err(e) => {
-                let _ = fs::remove_file(&temp_out);
                 return Err(diagnose_err!(
                     "ERR_ME_SPAWN_PYTHON_0x306",
                     "Failed to execute python3 for me_cleaner",
@@ -805,17 +861,16 @@ async fn write_bios(chip: String, data: Vec<u8>, window: tauri::Window) -> Resul
     if data.is_empty() {
         return Err("Write buffer empty - Load File or Read first".to_string());
     }
-    let buffer_path = unique_tmp("bios_write");
-    fs::write(&buffer_path, &data).map_err(|e| format!("Failed to write buffer: {}", e))?;
-
     let result = std::thread::spawn(move || {
-        let res = run_flashrom_with_progress(
+        let tmp = TempFile::with_data("bios_write", &data)
+            .map_err(|e| format!("Failed to write buffer: {}", e))?;
+        let buffer_path = tmp.path().to_string();
+        // tmp di-drop di akhir closure (termasuk panic) -> file terhapus.
+        run_flashrom_with_progress(
             &["-p", "ch341a_spi", "-c", &chip, "-w", &buffer_path],
             &window,
             "Writing",
-        );
-        let _ = fs::remove_file(&buffer_path);
-        res
+        )
     })
     .join()
     .map_err(|_| "Thread panicked".to_string())??;
@@ -835,17 +890,16 @@ async fn verify_bios(
     if data.is_empty() {
         return Err("Verify buffer empty - Load File or Read first".to_string());
     }
-    let buffer_path = unique_tmp("bios_verify");
-    fs::write(&buffer_path, &data).map_err(|e| format!("Failed to write buffer: {}", e))?;
-
     let result = std::thread::spawn(move || {
-        let res = run_flashrom_with_progress(
+        let tmp = TempFile::with_data("bios_verify", &data)
+            .map_err(|e| format!("Failed to write buffer: {}", e))?;
+        let buffer_path = tmp.path().to_string();
+        // tmp di-drop di akhir closure (termasuk panic) -> file terhapus.
+        run_flashrom_with_progress(
             &["-p", "ch341a_spi", "-c", &chip, "-v", &buffer_path],
             &window,
             "Verifying",
-        );
-        let _ = fs::remove_file(&buffer_path);
-        res
+        )
     })
     .join()
     .map_err(|_| "Thread panicked".to_string())??;
@@ -1016,44 +1070,32 @@ async fn blank_check_bios(chip: String, window: tauri::Window) -> Result<String,
     }
 
     let result = std::thread::spawn(move || {
-        let output_path = unique_tmp("bios_blank_check");
+        let tmp = TempFile::empty("bios_blank_check")
+            .map_err(|e| format!("Failed to create temp file: {}", e))?;
+        let output_path = tmp.path().to_string();
 
-        let result = run_flashrom_with_progress(
+        // tmp di-drop di akhir closure (termasuk panic) -> file terhapus.
+        run_flashrom_with_progress(
             &["-p", "ch341a_spi", "-c", &chip, "-r", &output_path],
             &window,
             "Reading",
-        );
+        )?;
 
-        match result {
-            Ok(_) => {
-                let data = fs::read(&output_path);
-                let _ = fs::remove_file(&output_path);
-                match data {
-                    Ok(bytes) => {
-                        if bytes.is_empty() {
-                            return Err("Read zero bytes from chip".to_string());
-                        }
-                        
-                        // Check if all bytes are 0xFF (standard blank flash state)
-                        // Also check for all 0x00 just in case for some rare chips, but 0xFF is standard
-                        let is_blank = bytes.iter().all(|&b| b == 0xFF);
-                        
-                        if is_blank {
-                            Ok("BLANK_OK".to_string())
-                        } else {
-                            // Find first offset that is not 0xFF
-                            let non_ff_offset = bytes.iter().position(|&b| b != 0xFF).unwrap_or(0);
-                            let non_ff_val = bytes[non_ff_offset];
-                            Err(format!("NOT_BLANK: Data found at offset 0x{:08X} (Value: 0x{:02X})", non_ff_offset, non_ff_val))
-                        }
-                    }
-                    Err(e) => Err(format!("Failed to read temp buffer: {}", e)),
-                }
-            }
-            Err(e) => {
-                let _ = fs::remove_file(&output_path);
-                Err(e)
-            }
+        let bytes = fs::read(&output_path).map_err(|e| format!("Failed to read temp buffer: {}", e))?;
+        if bytes.is_empty() {
+            return Err("Read zero bytes from chip".to_string());
+        }
+
+        // Check if all bytes are 0xFF (standard blank flash state)
+        // Also check for all 0x00 just in case for some rare chips, but 0xFF is standard
+        let is_blank = bytes.iter().all(|&b| b == 0xFF);
+        if is_blank {
+            Ok("BLANK_OK".to_string())
+        } else {
+            // Find first offset that is not 0xFF
+            let non_ff_offset = bytes.iter().position(|&b| b != 0xFF).unwrap_or(0);
+            let non_ff_val = bytes[non_ff_offset];
+            Err(format!("NOT_BLANK: Data found at offset 0x{:08X} (Value: 0x{:02X})", non_ff_offset, non_ff_val))
         }
     })
     .join()
@@ -1259,6 +1301,33 @@ mod compare_tests {
         let new = vec![0x11u8; 0x40000];
         let out = inject_dmi(old, new).expect("MSDM valid harus diterima");
         assert_eq!(out[pos + 20], 0xAB, "blok DMI lama wajib tersalin");
+    }
+
+    #[test]
+    fn test_inject_dmi_anchor3_sampah_ditolak() {
+        // REGRESI ronde 6: "_DMI_" sebagai string sampah (table_len absurd) TIDAK
+        // boleh dipercaya buat copy 64KB buta. Tidak ada MSDM/_SM_ valid di buffer.
+        let mut old = vec![0x00u8; 0x40000];
+        let pos = 0x2000;
+        old[pos..pos + 5].copy_from_slice(b"_DMI_");
+        // table_len @ +6 = 0x0000 (nol) -> harus ditolak.
+        let new = vec![0x11u8; 0x40000];
+        let r = inject_dmi(old, new);
+        assert!(r.is_err(), "_DMI_ dengan table_len absurd harus ditolak");
+        assert_eq!(r.unwrap_err().code, "ERR_DMI_SIGNATURE_NOT_FOUND_0x202");
+    }
+
+    #[test]
+    fn test_inject_dmi_anchor3_valid_diterima() {
+        // "_DMI_" dengan Structure Table Length masuk akal -> anchor diterima.
+        let mut old = vec![0x00u8; 0x40000];
+        let pos = 0x10000;
+        old[pos..pos + 5].copy_from_slice(b"_DMI_");
+        old[pos + 6..pos + 8].copy_from_slice(&0x0400u16.to_le_bytes()); // 1KB tabel
+        old[pos + 20] = 0xCD; // penanda unik
+        let new = vec![0x11u8; 0x40000];
+        let out = inject_dmi(old, new).expect("_DMI_ valid harus diterima");
+        assert_eq!(out[pos + 20], 0xCD, "blok DMI lama wajib tersalin");
     }
 
     #[test]

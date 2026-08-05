@@ -15,9 +15,18 @@ const MENU_ITEMS = [
   { id: 9, icon: "🔍", label: "Blank Check", direct: false },
 ];
 
-const APP_VERSION = "2.2.5";
+const APP_VERSION = "2.2.6";
 
 const INDO_CHANGELOG = [
+  {
+    version: "v2.2.6",
+    date: "2026-08-05",
+    items: [
+      "🔐 File BIOS sementara di /tmp dulu dibuat mode 0644 (bisa dibaca semua user PC) dan bisa nyangkut kalau proses crash — padahal isinya dump BIOS customer (lisensi Windows/serial). Sekarang temp lahir mode 0600 (cuma owner) dan otomatis terhapus di SEMUA jalur keluar termasuk saat panic (RAII drop-guard).",
+      "🧱 [BAHAYA BRICK] Anchor DMI ketiga (_DMI_) dulu langsung dipercaya begitu 5 byte cocok, tanpa cek struktur seperti anchor MSDM & _SM_. String sampah _DMI_ bisa memicu copy 64KB buta ke region acak. Sekarang panjang tabel SMBIOS di anchor divalidasi dulu (harus masuk akal) sebelum blok disalin.",
+      "🧪 Unit test 20 → 22 (test _DMI_ sampah ditolak + _DMI_ valid diterima).",
+    ]
+  },
   {
     version: "v2.2.5",
     date: "2026-08-05",
@@ -1700,7 +1709,7 @@ Mungkin chip terproteksi (Write Protect) atau Erase belum tuntas.`, { title: "Bl
             <h3 className="text-lg font-bold flex items-center gap-2">
               🔧 Megapass Service HP & Laptop Sidoarjo
             </h3>
-            <p className="text-xs opacity-60 mt-1">Version 2.2.5 (Tauri Professional Edition)</p>
+            <p className="text-xs opacity-60 mt-1">Version 2.2.6 (Tauri Professional Edition)</p>
             
             <div className="my-6 flex flex-col items-center justify-center py-6 border border-dashed border-base-content/20 rounded-lg bg-base-300">
               <div className="w-24 h-24 rounded-xl bg-primary/10 flex items-center justify-center border border-primary/20 text-primary font-bold text-center text-xs p-2 select-none">

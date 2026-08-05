@@ -2,6 +2,17 @@
 
 Semua catatan perubahan penting pada proyek **BIOS Flasher** milik Megapass Sidoarjo akan dicatat di file ini secara berkala.
 
+## [2.2.6] - 2026-08-05
+### Fixed — Audit ronde 6 (sisa temuan hardening + 1 BRICK laten)
+- **[LOW / KEBOCORAN DATA] Temp BIOS di `/tmp` 0644 + orphan saat crash:** `read_bios`, `write_bios`, `verify_bios`, `blank_check_bios`, dan `clean_me_region` (mode python) menulis dump BIOS mentah ke `/tmp` lewat `fs::write`/flashrom `-r` dengan mode default umask (**0644, world-readable**), lalu menghapusnya manual di tiap jalur `match`. Dua masalah: (1) selama operasi, dump BIOS customer (lisensi Windows/MSDM, serial) bisa dibaca user lain di PC yang sama; (2) kalau flashrom/thread **panic** di tengah, `remove_file` manual dilewati → file BIOS parsial nyangkut permanen di `/tmp`. Diperbaiki dengan guard RAII `TempFile`: file lahir **mode 0600** (`OpenOptions().mode(0o600)`) dan dihapus otomatis lewat `Drop` di **semua** jalur keluar termasuk panic. Semua `remove_file` manual yang tersebar dibuang (drop yang urus).
+- **[LOW→BRICK laten] Anchor `_DMI_` dipercaya tanpa validasi struktur:** `inject_dmi` anchor 1 (MSDM) & 2 (`_SM_`) memvalidasi field panjang sebelum menyalin 64KB, tapi anchor 3 (`_DMI_`) dulu langsung percaya begitu 5 byte cocok. `_DMI_` masih bisa muncul sebagai string sampah di dump → offset salah → 64KB di-copy buta ke region acak (NVRAM/ME/descriptor) → BIOS brick. Trigger nyaris mustahil (butuh MSDM & `_SM_` dua-duanya absen + kebetulan ada string `_DMI_`), tapi murah ditutup: sekarang field *Structure Table Length* (WORD @ +6) harus masuk akal (`0x20..=0x8000`) sebelum anchor dipercaya — konsisten dengan anchor 1 & 2.
+
+### Changed
+- **Versi 2.2.5 → 2.2.6.** Unit test **20 → 22** (`test_inject_dmi_anchor3_sampah_ditolak` + `test_inject_dmi_anchor3_valid_diterima`). Helper `unique_tmp` sekarang dibungkus guard `TempFile` (0600 + auto-unlink).
+
+### Catatan
+Ronde ini menutup DUA temuan terakhir audit ronde 4 yang tersisa (hardening `/tmp` + anchor `_DMI_`). Semua jalur temp flashrom kini fail-safe terhadap panic. CH341A terpasang fisik saat build.
+
 ## [2.2.5] - 2026-08-05
 ### Fixed — Audit ronde 4 lanjutan (1 MEDIUM + 3 LOW hardening)
 - **[MEDIUM] ME Cleaner mode "flag" palsu dibuang:** Mode default `flag` (`clean_me_region`, `lib.rs`) menulis `output_data[$FPT+16] = 0xFF`. Offset +0x10 adalah field UMASize di header $FPT — BUKAN toggle status ME — dan checksum header (+0x0B) tidak pernah dihitung ulang. Hasilnya UMASize korup + checksum basi, tapi UI melaporkan "✅ cleaned successfully" (`analyze_me_region` malah hardcode status "Dirty" sehingga verifikasi tak pernah bisa lulus). Operator flash → ME bisa gagal init, penyakit late-display/restart 30 menit tetap/tambah parah, dengan laporan sukses palsu. Diperbaiki: mode `flag` dihapus total (backend menolak dengan `ERR_ME_MODE_UNSUPPORTED_0x307`); hanya jalur `me_cleaner.py` (teruji, hitung checksum benar) yang dipakai. Radio "Reset Flag Cepat" dihapus dari UI.
