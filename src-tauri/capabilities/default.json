@@ -11,20 +11,6 @@
     "dialog:allow-save",
     "dialog:allow-message",
     "dialog:allow-ask",
-    "dialog:allow-confirm",
-    "fs:default",
-    "fs:allow-read",
-    "fs:allow-write",
-    "fs:allow-exists",
-    "fs:allow-mkdir",
-    "fs:allow-rename",
-    "fs:allow-remove",
-    "fs:allow-stat",
-    "fs:allow-read-dir",
-    "fs:allow-write-text-file",
-    "fs:allow-read-text-file",
-    "fs:scope-home",
-    "fs:scope-temp",
-    "fs:scope-desktop"
+    "dialog:allow-confirm"
   ]
 }

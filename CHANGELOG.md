@@ -2,6 +2,19 @@
 
 Semua catatan perubahan penting pada proyek **BIOS Flasher** milik Megapass Sidoarjo akan dicatat di file ini secara berkala.
 
+## [2.2.5] - 2026-08-05
+### Fixed — Audit ronde 4 lanjutan (1 MEDIUM + 3 LOW hardening)
+- **[MEDIUM] ME Cleaner mode "flag" palsu dibuang:** Mode default `flag` (`clean_me_region`, `lib.rs`) menulis `output_data[$FPT+16] = 0xFF`. Offset +0x10 adalah field UMASize di header $FPT — BUKAN toggle status ME — dan checksum header (+0x0B) tidak pernah dihitung ulang. Hasilnya UMASize korup + checksum basi, tapi UI melaporkan "✅ cleaned successfully" (`analyze_me_region` malah hardcode status "Dirty" sehingga verifikasi tak pernah bisa lulus). Operator flash → ME bisa gagal init, penyakit late-display/restart 30 menit tetap/tambah parah, dengan laporan sukses palsu. Diperbaiki: mode `flag` dihapus total (backend menolak dengan `ERR_ME_MODE_UNSUPPORTED_0x307`); hanya jalur `me_cleaner.py` (teruji, hitung checksum benar) yang dipakai. Radio "Reset Flag Cepat" dihapus dari UI.
+- **[LOW] Cek ukuran image vs chip sebelum Write/Instant Mode:** `runPreflight` dulu tak pernah membandingkan `buffer.length` dengan `chipInfo.size_kb*1024`. Instant Mode meng-erase chip DULU lalu flashrom menolak write kalau ukuran beda → chip terlanjur kosong. Sekarang preflight (saat `needBuffer`) memperingatkan operator kalau ukuran tidak cocok sebelum menyentuh hardware.
+- **[LOW] Izin `fs:*` Tauri yang tidak terpakai dihapus:** `capabilities/default.json` dulu memberi webview `fs:allow-write/remove/rename/mkdir` + `fs:scope-home/temp/desktop` (blast radius: tulis/hapus seisi home). Frontend tidak pernah meng-import `@tauri-apps/plugin-fs` — semua IO lewat command Rust custom. Blok `fs:*` + registrasi `tauri_plugin_fs::init()` + dependency `tauri-plugin-fs` dihapus. Pure hardening, tanpa kehilangan fungsi.
+- **[LOW] Temp file ME cleaner bocor saat write gagal:** Di `clean_me_region` mode python, kalau `fs::write(&temp_in)` error, fungsi dulu langsung return tanpa menghapus `temp_in` → file BIOS parsial (berisi lisensi/serial) nyangkut di `/tmp`. Ditambah `remove_file` di jalur error.
+
+### Changed
+- **Versi 2.2.4 → 2.2.5.** ME Clean modal sekarang single-method (me_cleaner.py). Dependency `tauri-plugin-fs` dilepas dari `Cargo.toml`.
+
+### Catatan
+Ronde ini menutup sisa temuan audit ronde 4 (MEDIUM + LOW). CH341A programmer terpasang fisik saat build — smoke test hardware (USB detect + chip detect) dijalankan, lihat bagian Verifikasi.
+
 ## [2.2.4] - 2026-08-05
 ### Fixed — Deep multi-agent audit ronde 4 (3 bug bahaya yang lolos audit v2.2.3)
 - **[BAHAYA CHIP / HIGH] Gerbang 1.8V fail-open untuk chip di luar database:** Proteksi 1.8V (`App.jsx` preflight + badge) hanya nyala kalau `chipInfo.voltage === "1.8V"` — perbandingan string persis. `get_chip_info` (`lib.rs`) mengembalikan `voltage:"Unknown"` untuk setiap chip yang dikenali flashrom tapi tidak ada di `chips.json` (~90 entri kurasi vs ribuan chip flashrom). Chip 1.8V yang tak ada di DB → `"Unknown"` → dialog konfirmasi adapter TIDAK muncul, badge peringatan TIDAK render, operator tidak dapat indikasi apa pun → CH341A menyalurkan ~3.3V ke die 1.8V → chip hangus permanen. Diperbaiki **fail-safe**: kecuali voltase POSITIF diketahui `"3.3V"`/`"5V"`, preflight memaksa konfirmasi adapter; ditambah badge kuning "VOLTASE TAK DIKENAL - CEK 1.8V!".

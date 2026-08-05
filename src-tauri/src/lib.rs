@@ -568,6 +568,10 @@ fn clean_me_region(data: Vec<u8>, mode: String, app_handle: tauri::AppHandle) ->
         let temp_out = unique_tmp("me_cleaner_out");
 
         if let Err(e) = fs::write(&temp_in, &data) {
+            // FIX #6 (audit ronde 4/LOW): dulu return langsung tanpa hapus temp_in.
+            // Kalau write gagal separuh (disk penuh), file BIOS parsial (berisi
+            // lisensi/serial customer) nyangkut di /tmp world-readable. Bersihkan.
+            let _ = fs::remove_file(&temp_in);
             return Err(diagnose_err!(
                 "ERR_ME_WRITE_TEMP_0x303",
                 "Failed to write temp ME file",
@@ -631,20 +635,16 @@ fn clean_me_region(data: Vec<u8>, mode: String, app_handle: tauri::AppHandle) ->
         }
     }
 
-    // Default mode: "flag" (status byte reset)
-    let mut output_data = data.clone();
-    if let Some(pos) = output_data.windows(4).position(|w| w == b"$FPT") {
-        let state_offset = pos + 16;
-        if state_offset < output_data.len() {
-            output_data[state_offset] = 0xFF;
-            return Ok(output_data);
-        }
-    }
-
+    // FIX #4 (audit ronde 4/MEDIUM): mode "flag" DIBUANG.
+    // Dulu ia nulis output_data[$FPT+16]=0xFF. Offset +0x10 itu field UMASize di
+    // header $FPT, BUKAN toggle status ME, dan checksum header (offset +0x0B)
+    // TIDAK dihitung ulang -> hasilnya UMASize korup + checksum basi, tapi UI
+    // lapor "cleaned successfully". Selain palsu, bisa bikin ME gagal init.
+    // Sekarang hanya jalur "python" (me_cleaner.py, terbukti benar) yang sah.
     Err(diagnose_err!(
-        "ERR_ME_FPT_HEADER_NOT_FOUND_0x302",
-        "Could not locate Intel ME $FPT header in buffer to clean",
-        format!("buffer_len: {}", data.len())
+        "ERR_ME_MODE_UNSUPPORTED_0x307",
+        "Mode ME clean tidak didukung. Gunakan me_cleaner.py.",
+        format!("mode: {}", mode)
     ))
 }
 
@@ -1067,7 +1067,6 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_fs::init())
         .invoke_handler(tauri::generate_handler![
             check_usb,
             detect_chip,

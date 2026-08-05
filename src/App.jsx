@@ -15,9 +15,19 @@ const MENU_ITEMS = [
   { id: 9, icon: "🔍", label: "Blank Check", direct: false },
 ];
 
-const APP_VERSION = "2.2.4";
+const APP_VERSION = "2.2.5";
 
 const INDO_CHANGELOG = [
+  {
+    version: "v2.2.5",
+    date: "2026-08-05",
+    items: [
+      "🧬 [PENTING] ME Cleaner mode 'Reset Flag Cepat' DIBUANG. Mode itu dulu default dan cuma menulis 1 byte di header $FPT tanpa memperbaiki checksum, lalu lapor 'berhasil' padahal ME tidak benar-benar dibersihkan (bisa bikin ME gagal init). Sekarang hanya metode me_cleaner.py (teruji) yang dipakai.",
+      "📏 Sebelum Write/Instant Mode, ukuran image dicek terhadap ukuran chip. Kalau beda (salah chip/salah file), operator diperingatkan dulu — mencegah Instant Mode menghapus chip lebih dulu lalu gagal write.",
+      "🔒 Izin file system aplikasi (Tauri) dipangkas: blok fs yang tidak pernah dipakai frontend dihapus total, mengurangi permukaan serang. Semua operasi file tetap lewat command internal.",
+      "🧹 Temp file ME cleaner dibersihkan juga saat penulisan gagal (dulu bisa nyangkut di /tmp).",
+    ]
+  },
   {
     version: "v2.2.4",
     date: "2026-08-05",
@@ -323,7 +333,11 @@ export default function App() {
   // DMI inline manual edit mode states & handle
   const [editingField, setEditingField] = useState(""); // "sn" | "winKey" | "bid" | "svctag"
   const [editValue, setEditValue] = useState("");
-  const [meCleanMode, setMeCleanMode] = useState("flag"); // "flag" | "python"
+  // FIX #4 (audit ronde 4/MEDIUM): mode "flag" DIBUANG. Dulu ia nulis 0xFF di
+  // $FPT+16 (field UMASize, BUKAN toggle ME), TIDAK hitung ulang checksum FPT,
+  // lalu lapor "cleaned successfully" -> ME bisa gagal init, laporan palsu.
+  // Sekarang cuma jalur me_cleaner.py (terbukti benar) yang dipakai.
+  const [meCleanMode] = useState("python");
   const [showMeCleanModal, setShowMeCleanModal] = useState(false);
 
   const startEditField = (field, currentVal) => {
@@ -447,6 +461,27 @@ export default function App() {
         return false;
       }
       appendLog(`✅ Pre-flight: voltase (${volt}) dikonfirmasi operator`);
+    }
+
+    // FIX #5 (audit ronde 4/LOW): cek ukuran image vs ukuran chip sebelum operasi
+    // pakai buffer (Write/Instant). Instant Mode erase DULUAN; kalau ukuran beda,
+    // flashrom nolak write TAPI chip udah terlanjur kosong. Cegah di depan.
+    if (needBuffer && chipInfo?.size_kb > 0 && buffer) {
+      const chipBytes = chipInfo.size_kb * 1024;
+      if (buffer.length !== chipBytes) {
+        const ok = window.confirm(
+          `⚠️ Ukuran TIDAK cocok!\n\n` +
+          `Image di buffer : ${(buffer.length / 1024 / 1024).toFixed(2)} MB\n` +
+          `Chip terdeteksi : ${(chipBytes / 1024 / 1024).toFixed(2)} MB (${chip})\n\n` +
+          `Kemungkinan salah chip terdeteksi atau salah file. flashrom akan menolak write, ` +
+          `tapi Instant Mode sudah menghapus chip lebih dulu. Yakin lanjut?`
+        );
+        if (!ok) {
+          appendLog(`⛔ Dibatalkan - ukuran image (${buffer.length}B) != chip (${chipBytes}B)`);
+          return false;
+        }
+        appendLog(`⚠️ Pre-flight: ukuran tidak cocok, dilanjutkan atas konfirmasi operator`);
+      }
     }
 
     appendLog(
@@ -918,14 +953,14 @@ ${diagnosticError.context || "No raw context"}
   const executeMeClean = async () => {
     setShowMeCleanModal(false);
     try {
-      appendLog(`🧹 Resetting/Cleaning Intel ME Region via [${meCleanMode === "python" ? "me_cleaner.py" : "Reset Flag Cepat"}]...`);
+      appendLog(`🧹 Cleaning Intel ME Region via [me_cleaner.py]...`);
       const result = await invoke("clean_me_region", {
         data: Array.from(buffer),
         mode: meCleanMode
       });
       const bytes = new Uint8Array(result);
       setBuffer(bytes);
-      appendLog(`✅ Intel ME Region cleaned successfully via [${meCleanMode === "python" ? "me_cleaner.py" : "Reset Flag"}]!`);
+      appendLog(`✅ Intel ME Region cleaned via [me_cleaner.py]!`);
       playSound("success");
 
       const me = await invoke("analyze_me_region", { data: Array.from(bytes) });
@@ -1633,36 +1668,16 @@ Mungkin chip terproteksi (Write Protect) atau Erase belum tuntas.`, { title: "Bl
             <p className="text-[10px] opacity-60 mt-1">Mengatasi late display atau mati tiap 30 menit akibat BIOS donor.</p>
             
             <div className="py-4 space-y-3">
-              <div className="form-control bg-base-300 p-2.5 rounded-lg border border-base-content/5">
-                <label className="label c‍ursor-pointer justify-start gap-3">
-                  <input 
-                    type="radio" 
-                    name="me-clean-mode" 
-                    className="radio radio-warning radio-sm"
-                    checked={meCleanMode === "flag"}
-                    onChange={() => setMeCleanMode("flag")}
-                  />
+              {/* FIX #4: mode "Reset Flag Cepat" dibuang (lapor sukses palsu +
+                  korup checksum $FPT). Hanya me_cleaner.py yang dipakai. */}
+              <div className="form-control bg-base-300 p-2.5 rounded-lg border border-warning/30">
+                <div className="flex items-start gap-3">
+                  <span className="text-lg">🧬</span>
                   <div>
-                    <span className="label-text font-bold text-xs">Reset Flag Cepat (Default)</span>
-                    <p className="text-[9px] opacity-50">Mengubah byte status $FPT. Cocok untuk laptop lama/TXE.</p>
+                    <span className="label-text font-bold text-xs">Gunakan me_cleaner.py</span>
+                    <p className="text-[9px] opacity-50">Sunat partisi ME region secara mendalam (metode teruji). Rekomendasi Intel Gen 6 ke atas.</p>
                   </div>
-                </label>
-              </div>
-
-              <div className="form-control bg-base-300 p-2.5 rounded-lg border border-base-content/5">
-                <label className="label c‍ursor-pointer justify-start gap-3">
-                  <input 
-                    type="radio" 
-                    name="me-clean-mode" 
-                    className="radio radio-warning radio-sm"
-                    checked={meCleanMode === "python"}
-                    onChange={() => setMeCleanMode("python")}
-                  />
-                  <div>
-                    <span className="label-text font-bold text-xs">Gunakan me_cleaner.py (Rekomendasi)</span>
-                    <p className="text-[9px] opacity-50">Sunat partisi ME region secara mendalam. Rekomendasi Intel Gen 6 ke atas.</p>
-                  </div>
-                </label>
+                </div>
               </div>
             </div>
 
@@ -1685,7 +1700,7 @@ Mungkin chip terproteksi (Write Protect) atau Erase belum tuntas.`, { title: "Bl
             <h3 className="text-lg font-bold flex items-center gap-2">
               🔧 Megapass Service HP & Laptop Sidoarjo
             </h3>
-            <p className="text-xs opacity-60 mt-1">Version 2.2.4 (Tauri Professional Edition)</p>
+            <p className="text-xs opacity-60 mt-1">Version 2.2.5 (Tauri Professional Edition)</p>
             
             <div className="my-6 flex flex-col items-center justify-center py-6 border border-dashed border-base-content/20 rounded-lg bg-base-300">
               <div className="w-24 h-24 rounded-xl bg-primary/10 flex items-center justify-center border border-primary/20 text-primary font-bold text-center text-xs p-2 select-none">
