@@ -1,4 +1,4 @@
-# ⚡ BIOS Flasher Professional Edition v2.1.3
+# ⚡ BIOS Flasher Professional Edition v2.2.6
 ### 🔧 *The Ultimate SPI Flasher Tool for Megapass Sidoarjo*
 
 [![Tauri](https://img.shields.io/badge/Framework-Tauri%20v2-blue?logo=tauri)](https://tauri.app/)
@@ -35,7 +35,7 @@ Aplikasi GUI modern, super cepat, dan ringan berbasis **Tauri v2 (Rust Backend &
 
 ### B. Backend Level (Rust / Cargo)
 *   **`tauri` (v2.x):** Framework inti integrasi desktop dan security sandbox.
-*   **`tauri-plugin-dialog` & `tauri-plugin-fs`:** Plugin dialog buka/simpan file native OS serta read/write file lokal.
+*   **`tauri-plugin-dialog` & `tauri-plugin-opener`:** Plugin dialog buka/simpan file native OS + pembuka URL/file eksternal. (Plugin `fs` dilepas sejak v2.2.5 — semua IO file lewat command Rust internal demi keamanan.)
 *   **`regex`:** Engine pencarian pola teks berkecepatan tinggi untuk ekstraksi data DMI.
 *   **`md5`:** Library checksum MD5 untuk validasi file backup.
 *   **`serde` & `serde_json`:** Library serialisasi data pertukaran format JSON antara Rust & React.
@@ -110,6 +110,9 @@ Hasil build binary dapat ditemukan di: `src-tauri/target/release/bios-flasher`.
 
 
 ---
+
+## 📜 Riwayat Versi
+Semua perubahan tercatat di [`CHANGELOG.md`](CHANGELOG.md). Rilis stabil terkini: **v2.2.6** (hardening keamanan: temp file `/tmp` mode 0600 + auto-cleanup anti-panic, validasi anchor `_DMI_`).
 
 ## 📋 SOP Meja Servis
 
