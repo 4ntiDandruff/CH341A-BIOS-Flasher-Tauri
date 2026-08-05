@@ -698,10 +698,34 @@ fn extract_dmi_and_key(data: Vec<u8>) -> serde_json::Value {
     else if upper_text.contains("GIGABYTE") { brand = "Gigabyte".to_string(); }
     else if upper_text.contains("MSI") { brand = "MSI".to_string(); }
 
+    // FIX #2 (audit ronde 4): DULU ambil kecocokan byte PERTAMA di seluruh buffer.
+    // Field pendek (Board ID 4-6 char, Service Tag 7 char) gampang nabrak byte
+    // kembar di region lain -> offset nunjuk lokasi SALAH -> edit nulis ke tempat
+    // acak -> BIOS brick. Guard overwrite_dmi_value TIDAK nolong (byte di offset
+    // salah itu justru cocok dengan nilai lama, itu sebabnya kepilih).
+    //
+    // Perbaikan: offset hanya sah kalau nilai muncul TEPAT 1x di buffer. Kalau
+    // ambigu (>1x) atau tidak ada -> 0. UI memblokir edit saat offset 0, jadi
+    // teknisi disuruh cek manual daripada nekat nulis ke lokasi tebakan.
     let find_field_offset = |raw_data: &[u8], field_val: &str| -> usize {
         if field_val.is_empty() || field_val == "Not Found" { return 0; }
         let bytes = field_val.as_bytes();
-        raw_data.windows(bytes.len()).position(|w| w == bytes).unwrap_or(0)
+        if bytes.is_empty() || bytes.len() > raw_data.len() { return 0; }
+        let mut first = None;
+        let mut count = 0usize;
+        for (i, w) in raw_data.windows(bytes.len()).enumerate() {
+            if w == bytes {
+                if first.is_none() { first = Some(i); }
+                count += 1;
+                if count > 1 { break; }
+            }
+        }
+        // Offset 0 tetap "ambigu/not found" secara konvensi (UI cek !offset).
+        // Field DMI nyata tidak pernah di byte 0 (itu vector reset/descriptor).
+        match (first, count) {
+            (Some(pos), 1) if pos != 0 => pos,
+            _ => 0,
+        }
     };
 
     let re_bid = Regex::new(r"(?i)BID([0-9A-F]{4,6})").unwrap();
@@ -1283,6 +1307,52 @@ mod compare_tests {
         // bukti kuat: byte di offset yang dilaporkan HARUS awal key sungguhan
         assert_eq!(&bios[reported..reported + 5], b"VK7JG",
             "offset yang dilaporkan harus menunjuk awal key sebenarnya");
+    }
+
+    #[test]
+    fn test_find_offset_ambigu_ditolak() {
+        // REGRESI FIX #2: nilai field yang muncul >1x di buffer = ambigu.
+        // Offset harus 0 (UI blokir edit) supaya tidak nulis ke lokasi tebakan salah.
+        // Dell service tag "ABC1234" ditaruh 2x: sekali "sampah" duluan, sekali di DMI.
+        let mut bios = vec![0xFFu8; 8192];
+        // brand marker Dell (huruf besar dicek via to_uppercase di extractor)
+        let dell = b"DELL INC.";
+        bios[100..100 + dell.len()].copy_from_slice(dell);
+        let tag = b"ABC1234";
+        // kemunculan 1 (duluan, region acak) + kemunculan 2 (belakangan)
+        bios[500..500 + tag.len()].copy_from_slice(tag);
+        bios[3000..3000 + tag.len()].copy_from_slice(tag);
+        // pemisah non-alnum supaya \b regex mengenali sebagai token utuh
+        bios[499] = 0x20; bios[507] = 0x20;
+        bios[2999] = 0x20; bios[3007] = 0x20;
+
+        let info = extract_dmi_and_key(bios);
+        // tag boleh saja ke-parse, tapi offset WAJIB 0 karena ambigu -> UI tolak edit
+        assert_eq!(
+            info["service_tag_offset"].as_u64().unwrap(),
+            0,
+            "nilai ambigu (muncul 2x) harus offset 0, bukan nebak lokasi -> cegah brick"
+        );
+    }
+
+    #[test]
+    fn test_find_offset_unik_akurat() {
+        // FIX #2: nilai yang muncul TEPAT 1x harus mengembalikan offset yang benar,
+        // dan byte di offset itu harus persis nilainya (bukan lokasi lain).
+        let mut bios = vec![0xFFu8; 8192];
+        let dell = b"DELL INC.";
+        bios[100..100 + dell.len()].copy_from_slice(dell);
+        let tag = b"XYZ9876";
+        let off = 2500;
+        bios[off - 1] = 0x20;
+        bios[off..off + tag.len()].copy_from_slice(tag);
+        bios[off + tag.len()] = 0x20;
+
+        let info = extract_dmi_and_key(bios.clone());
+        let reported = info["service_tag_offset"].as_u64().unwrap() as usize;
+        assert_eq!(reported, off, "nilai unik harus mengembalikan offset sebenarnya");
+        assert_eq!(&bios[reported..reported + tag.len()], tag,
+            "byte di offset yang dilaporkan harus == service tag");
     }
 
     #[test]

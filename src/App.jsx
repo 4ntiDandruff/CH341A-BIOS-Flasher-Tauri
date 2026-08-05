@@ -15,12 +15,22 @@ const MENU_ITEMS = [
   { id: 9, icon: "🔍", label: "Blank Check", direct: false },
 ];
 
-const APP_VERSION = "2.2.3";
+const APP_VERSION = "2.2.4";
 
 const INDO_CHANGELOG = [
   {
-    version: "v2.2.3",
+    version: "v2.2.4",
     date: "2026-08-05",
+    items: [
+      "🔥 [BAHAYA CHIP] Proteksi 1.8V dulu cuma nyala kalau voltase chip persis '1.8V'. Chip 1.8V yang tak ada di database kebaca 'Unknown' → peringatan tidak muncul sama sekali → chip bisa hangus kena 3.3V. Sekarang FAIL-SAFE: selain 3.3V/5V yang terkonfirmasi, aplikasi WAJIB minta konfirmasi adapter dulu, plus badge peringatan kuning untuk voltase tak dikenal.",
+      "🧱 [BAHAYA BRICK] Edit DMI (Serial/Board ID/Service Tag) dulu mencari lokasi lewat kecocokan byte PERTAMA di seluruh file — field pendek gampang nabrak byte kembar → tulisan mendarat di region acak → BIOS mati. Sekarang lokasi hanya sah kalau nilainya unik (muncul tepat 1x); kalau ambigu, edit diblokir daripada nebak.",
+      "💾 [BAHAYA DATA] Erase dulu langsung membuang isi buffer RAM (setBuffer null) — padahal itu sering satu-satunya copy BIOS + lisensi Windows customer. Sekarang buffer dipertahankan sebagai sumber re-write, DAN sebelum Erase/Instant Mode aplikasi memaksa backup .bin dulu kalau belum tersimpan.",
+      "🧪 Unit test 18 → 20 (test unik/ambigu untuk lokasi field DMI).",
+    ]
+  },
+  {
+    version: "v2.2.3",
+    date: "2026-08-04",
     items: [
       "🛡️ [PENTING] Perbaikan lanjutan dari v2.2.2 (BUG-11): saat meng-edit Windows Key / Serial / Board ID / Service Tag, kalau field-nya nempel langsung ke tabel ACPI berikutnya (mis. SSDT) tanpa pemisah, byte tetangga bisa ketimpa null dan merusak struktur BIOS. Sekarang batas field diambil dari nilai lama yang tampil, tidak lagi menebak dengan scan — tetangga dijamin utuh.",
       "🔒 Edit DMI sekarang memverifikasi byte di offset masih cocok dengan nilai lama sebelum menulis. Kalau buffer sudah berubah (offset basi), tulisan ditolak — bukan mendarat di lokasi salah.",
@@ -416,15 +426,27 @@ export default function App() {
       return false;
     }
 
-    if (chipInfo?.voltage === "1.8V") {
+    // FIX #1 (audit ronde 4): DULU cuma warning kalau voltase PERSIS "1.8V".
+    // chips.json cuma ~90 chip; flashrom kenal ribuan. Chip 1.8V yang tak ada di
+    // DB -> voltase "Unknown" -> dialog & badge tidak muncul sama sekali -> CH341A
+    // hajar 3.3V -> chip hangus. Gerbang fail-OPEN.
+    // Perbaikan fail-SAFE: paksa konfirmasi kecuali voltase POSITIF diketahui 3.3V.
+    const knownSafe = chipInfo?.voltage === "3.3V" || chipInfo?.voltage === "5V";
+    if (!knownSafe) {
+      const volt = chipInfo?.voltage && chipInfo.voltage !== "Unknown"
+        ? chipInfo.voltage
+        : "TIDAK DIKENAL (tidak ada di database chip)";
       const ok = window.confirm(
-        `Chip ${chip} = 1.8V\n\nWAJIB pakai adapter level shifter 1.8V.\nTanpa adapter chip bisa hangus.\n\nAdapter 1.8V sudah terpasang?`
+        `Voltase chip ${chip}: ${volt}\n\n` +
+        `Chip ini BUKAN 3.3V yang terkonfirmasi. Kalau ternyata 1.8V dan ` +
+        `dihajar 3.3V tanpa adapter level shifter, chip HANGUS.\n\n` +
+        `Cek datasheet chip. Adapter 1.8V sudah terpasang / yakin aman lanjut?`
       );
       if (!ok) {
-        appendLog("⛔ Dibatalkan - konfirmasi adapter 1.8V ditolak operator");
+        appendLog(`⛔ Dibatalkan - konfirmasi voltase (${volt}) ditolak operator`);
         return false;
       }
-      appendLog("✅ Pre-flight: adapter 1.8V dikonfirmasi operator");
+      appendLog(`✅ Pre-flight: voltase (${volt}) dikonfirmasi operator`);
     }
 
     appendLog(
@@ -731,19 +753,20 @@ ${diagnosticError.context || "No raw context"}
   }
 
   async function handleBackup() {
-    if (!buffer || buffer.length === 0) { appendLog("⚠️ No data in buffer. Read chip first!"); return; }
+    if (!buffer || buffer.length === 0) { appendLog("⚠️ No data in buffer. Read chip first!"); return null; }
     const path = await save({
       title: "Save BIOS Backup",
       defaultPath: `backup_${chip || "bios"}_${new Date().toISOString().slice(0,10)}.bin`,
       filters: [{ name: "Binary", extensions: ["bin", "rom"] }],
     });
-    if (!path) { appendLog("Backup cancelled."); return; }
+    if (!path) { appendLog("Backup cancelled."); return null; }
     appendLog(`💾 Saving to ${path}...`);
     const md5 = await invoke("backup_bios", { path, data: Array.from(buffer) });
     setFileName(path);
     appendLog(`✅ Backup saved. MD5: ${md5}`);
     setProgress(100);
     playSound('success');
+    return path; // FIX #3: kembalikan path supaya caller bisa cek sinkron (state async)
   }
 
   async function handleOpenBackup() {
@@ -988,8 +1011,35 @@ Mungkin chip terproteksi (Write Protect) atau Erase belum tuntas.`, { title: "Bl
     }
   }
 
+  // FIX #3 (audit ronde 4): sebelum operasi destruktif (Erase/Write/Instant),
+  // pastikan isi buffer sudah punya backup .bin. Buffer hasil Read chip mati
+  // sering jadi SATU-SATUNYA copy BIOS customer (lisensi MSDM, serial, DMI).
+  // fileName kosong = buffer belum pernah disimpan ke file. Paksa backup dulu.
+  async function ensureBackupBeforeDestroy(opLabel) {
+    if (!buffer || buffer.length === 0) return true; // gak ada yang perlu dilindungi
+    if (fileName && fileName.trim() !== "") return true; // sudah ada file backup
+    const doBackup = window.confirm(
+      `⚠️ Buffer RAM belum disimpan ke file .bin!\n\n` +
+      `Isi buffer ini bisa jadi SATU-SATUNYA copy BIOS customer ` +
+      `(lisensi Windows/MSDM, serial). ${opLabel} akan menimpanya permanen.\n\n` +
+      `Klik OK untuk Simpan Backup dulu (disarankan), atau Cancel untuk tetap lanjut TANPA backup.`
+    );
+    if (doBackup) {
+      // Cek nilai kembalian, BUKAN state fileName (state React async - masih lama di sini).
+      const savedPath = await handleBackup();
+      if (!savedPath) {
+        appendLog(`⛔ ${opLabel} dibatalkan - backup belum tersimpan.`);
+        return false;
+      }
+      return true;
+    }
+    // Operator sadar memilih lanjut tanpa backup.
+    return window.confirm(`🚨 Yakin ${opLabel} TANPA backup? Data buffer akan HILANG permanen.`);
+  }
+
   async function handleErase() {
     if (!(await runPreflight({ needBuffer: false, opLabel: "Erase" }))) return;
+    if (!(await ensureBackupBeforeDestroy("Erase"))) return;
     if (!window.confirm(`⚠️ ERASE chip ${chip}?\nThis will permanently destroy all data!`)) return;
     if (!window.confirm(`🚨 FINAL WARNING!\nAre you ABSOLUTELY SURE you want to erase ${chip}?`)) return;
     appendLog(`🗑️ Erasing ${chip}...`);
@@ -997,13 +1047,15 @@ Mungkin chip terproteksi (Write Protect) atau Erase belum tuntas.`, { title: "Bl
     await invoke("erase_bios", { chip });
     const duration = formatDuration(performance.now() - start);
     appendLog(`✅ Erase completed in ${duration}`);
-    setBuffer(null);
+    // FIX #3: JANGAN null buffer. Buffer tetap dipertahankan sebagai sumber
+    // re-write (biasanya habis Erase operator mau flash ulang image itu juga).
     setProgress(100);
     playSound('success');
   }
 
   async function handleInstantMode() {
     if (!(await runPreflight({ needBuffer: true, opLabel: "Instant Mode" }))) return;
+    if (!(await ensureBackupBeforeDestroy("Instant Mode"))) return;
     const sizeKb = (buffer.length / 1024).toFixed(0);
     if (!window.confirm(`Instant Mode\nErase -> Write -> Verify\n\nTarget: ${chip}\nData: ${sizeKb}KB\n\nLanjut?`)) {
       appendLog("Instant Mode dibatalkan operator.");
@@ -1083,6 +1135,12 @@ Mungkin chip terproteksi (Write Protect) atau Erase belum tuntas.`, { title: "Bl
           {chipInfo?.voltage === "1.8V" && (
             <span className="badge badge-error font-bold text-xs animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.7)]">
               ⚠️ WAJIB PAKAI ADAPTER 1.8V!
+            </span>
+          )}
+          {/* FIX #1: voltase tak dikenal = mungkin 1.8V, kasih warning juga */}
+          {chipInfo?.manufacturer && chipInfo?.voltage !== "1.8V" && chipInfo?.voltage !== "3.3V" && chipInfo?.voltage !== "5V" && (
+            <span className="badge badge-warning font-bold text-xs animate-pulse">
+              ⚠️ VOLTASE TAK DIKENAL - CEK 1.8V!
             </span>
           )}
         </div>
@@ -1627,7 +1685,7 @@ Mungkin chip terproteksi (Write Protect) atau Erase belum tuntas.`, { title: "Bl
             <h3 className="text-lg font-bold flex items-center gap-2">
               🔧 Megapass Service HP & Laptop Sidoarjo
             </h3>
-            <p className="text-xs opacity-60 mt-1">Version 2.2.3 (Tauri Professional Edition)</p>
+            <p className="text-xs opacity-60 mt-1">Version 2.2.4 (Tauri Professional Edition)</p>
             
             <div className="my-6 flex flex-col items-center justify-center py-6 border border-dashed border-base-content/20 rounded-lg bg-base-300">
               <div className="w-24 h-24 rounded-xl bg-primary/10 flex items-center justify-center border border-primary/20 text-primary font-bold text-center text-xs p-2 select-none">
