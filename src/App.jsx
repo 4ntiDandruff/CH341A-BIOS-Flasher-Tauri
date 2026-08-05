@@ -15,9 +15,18 @@ const MENU_ITEMS = [
   { id: 9, icon: "🔍", label: "Blank Check", direct: false },
 ];
 
-const APP_VERSION = "2.2.2";
+const APP_VERSION = "2.2.3";
 
 const INDO_CHANGELOG = [
+  {
+    version: "v2.2.3",
+    date: "2026-08-05",
+    items: [
+      "🛡️ [PENTING] Perbaikan lanjutan dari v2.2.2 (BUG-11): saat meng-edit Windows Key / Serial / Board ID / Service Tag, kalau field-nya nempel langsung ke tabel ACPI berikutnya (mis. SSDT) tanpa pemisah, byte tetangga bisa ketimpa null dan merusak struktur BIOS. Sekarang batas field diambil dari nilai lama yang tampil, tidak lagi menebak dengan scan — tetangga dijamin utuh.",
+      "🔒 Edit DMI sekarang memverifikasi byte di offset masih cocok dengan nilai lama sebelum menulis. Kalau buffer sudah berubah (offset basi), tulisan ditolak — bukan mendarat di lokasi salah.",
+      "🧪 Unit test 16 → 18, termasuk test khusus BUG-11 (field nempel tabel ACPI) dan test penolakan offset basi.",
+    ]
+  },
   {
     version: "v2.2.2",
     date: "2026-08-03",
@@ -317,7 +326,7 @@ export default function App() {
     setEditValue("");
   };
 
-  const saveEditField = async (field, offset) => {
+  const saveEditField = async (field, offset, oldValue) => {
     if (!offset || offset === 0) {
       appendLog("⚠️ Gagal edit: Lokasi offset data tidak ditemukan di file BIOS.");
       setEditingField("");
@@ -327,13 +336,18 @@ export default function App() {
       appendLog("⚠️ Gagal: Nilai baru tidak boleh kosong.");
       return;
     }
+    if (!oldValue || oldValue === "Not Found") {
+      appendLog("⚠️ Gagal: Nilai lama tidak tersedia untuk menentukan batas field.");
+      return;
+    }
 
     try {
       appendLog(`✍️ Mengubah byte DMI [${field}] pada offset 0x${offset.toString(16).toUpperCase()} ke: "${editValue.trim()}"`);
       const result = await invoke("overwrite_dmi_value", {
         data: Array.from(buffer),
         offset: offset,
-        newValue: editValue.trim()
+        newValue: editValue.trim(),
+        oldValue: oldValue
       });
       const bytes = new Uint8Array(result);
       setBuffer(bytes);
@@ -1216,7 +1230,7 @@ Mungkin chip terproteksi (Write Protect) atau Erase belum tuntas.`, { title: "Bl
                     value={editValue}
                     onChange={(e) => setEditValue(e.target.value)}
                   />
-                  <button className="btn btn-xs btn-success px-1" onClick={() => saveEditField("winKey", dmiInfo.windows_key_offset)}>💾</button>
+                  <button className="btn btn-xs btn-success px-1" onClick={() => saveEditField("winKey", dmiInfo.windows_key_offset, dmiInfo.windows_key)}>💾</button>
                   <button className="btn btn-xs btn-ghost px-1" onClick={cancelEditField}>✕</button>
                 </div>
               ) : (
@@ -1258,7 +1272,7 @@ Mungkin chip terproteksi (Write Protect) atau Erase belum tuntas.`, { title: "Bl
                     value={editValue}
                     onChange={(e) => setEditValue(e.target.value)}
                   />
-                  <button className="btn btn-xs btn-success px-1" onClick={() => saveEditField("sn", dmiInfo.serial_number_offset)}>💾</button>
+                  <button className="btn btn-xs btn-success px-1" onClick={() => saveEditField("sn", dmiInfo.serial_number_offset, dmiInfo.serial_number)}>💾</button>
                   <button className="btn btn-xs btn-ghost px-1" onClick={cancelEditField}>✕</button>
                 </div>
               ) : (
@@ -1302,7 +1316,7 @@ Mungkin chip terproteksi (Write Protect) atau Erase belum tuntas.`, { title: "Bl
                         value={editValue}
                         onChange={(e) => setEditValue(e.target.value)}
                       />
-                      <button className="btn btn-xs btn-success px-1" onClick={() => saveEditField("bid", dmiInfo.board_id_offset)}>💾</button>
+                      <button className="btn btn-xs btn-success px-1" onClick={() => saveEditField("bid", dmiInfo.board_id_offset, dmiInfo.board_id)}>💾</button>
                       <button className="btn btn-xs btn-ghost px-1" onClick={cancelEditField}>✕</button>
                     </div>
                   ) : (
@@ -1344,7 +1358,7 @@ Mungkin chip terproteksi (Write Protect) atau Erase belum tuntas.`, { title: "Bl
                         value={editValue}
                         onChange={(e) => setEditValue(e.target.value)}
                       />
-                      <button className="btn btn-xs btn-success px-1" onClick={() => saveEditField("svctag", dmiInfo.service_tag_offset)}>💾</button>
+                      <button className="btn btn-xs btn-success px-1" onClick={() => saveEditField("svctag", dmiInfo.service_tag_offset, dmiInfo.service_tag)}>💾</button>
                       <button className="btn btn-xs btn-ghost px-1" onClick={cancelEditField}>✕</button>
                     </div>
                   ) : (
@@ -1613,7 +1627,7 @@ Mungkin chip terproteksi (Write Protect) atau Erase belum tuntas.`, { title: "Bl
             <h3 className="text-lg font-bold flex items-center gap-2">
               🔧 Megapass Service HP & Laptop Sidoarjo
             </h3>
-            <p className="text-xs opacity-60 mt-1">Version 2.2.2 (Tauri Professional Edition)</p>
+            <p className="text-xs opacity-60 mt-1">Version 2.2.3 (Tauri Professional Edition)</p>
             
             <div className="my-6 flex flex-col items-center justify-center py-6 border border-dashed border-base-content/20 rounded-lg bg-base-300">
               <div className="w-24 h-24 rounded-xl bg-primary/10 flex items-center justify-center border border-primary/20 text-primary font-bold text-center text-xs p-2 select-none">

@@ -928,69 +928,60 @@ fn get_chip_info(chip: String, app_handle: tauri::AppHandle) -> Result<serde_jso
 
 // 1. Overwrite DMI value in binary at exact offset
 #[tauri::command]
-fn overwrite_dmi_value(mut data: Vec<u8>, offset: usize, new_value: String) -> Result<Vec<u8>, String> {
-    if offset >= data.len() {
+fn overwrite_dmi_value(
+    mut data: Vec<u8>,
+    offset: usize,
+    new_value: String,
+    old_value: String,
+) -> Result<Vec<u8>, String> {
+    // FIX BUG-11: panjang slot DULU ditebak dengan nge-scan byte printable maju
+    // dari offset. Kalau field (mis. Windows Key 29 char) nempel langsung ke
+    // signature tabel ACPI berikutnya ("SSDT") TANPA null/spasi pemisah, scan
+    // "makan" tetangga -> saat padding, tetangga ketimpa 0x00 -> BIOS korup.
+    // (Terbukti via test regresi win_key_edit_corrupts_next_acpi_table.)
+    //
+    // Sumber kebenaran panjang field = nilai lama yang sudah tampil di UI, BUKAN
+    // hasil scan. Slot = tepat old_value.len() byte, tidak pernah lebih.
+    let slot_len = old_value.len();
+    if slot_len == 0 {
+        return Err("Nilai lama kosong - tidak bisa menentukan batas field DMI.".to_string());
+    }
+    if offset >= data.len() || offset + slot_len > data.len() {
         return Err("Invalid offset position".to_string());
     }
-    
-    let mut original_len = 0;
-    let mut pad_char = 0x00; // Default to null byte
-    
-    let mut i = 0;
-    while offset + i < data.len() {
-        let b = data[offset + i];
-        // 0x21..=0x7E are non-space printable characters
-        if b.is_ascii() && (0x21..=0x7E).contains(&b) {
-            original_len += 1;
-            i += 1;
-        } else {
-            break;
-        }
+
+    // Verifikasi offset masih valid: byte di data HARUS sama dengan nilai lama.
+    // Nangkis offset basi (buffer berubah sejak extraction) yang bisa bikin
+    // tulisan mendarat di lokasi salah.
+    if &data[offset..offset + slot_len] != old_value.as_bytes() {
+        return Err(
+            "Offset field sudah tidak cocok dengan data buffer (buffer berubah?). \
+             Detect/Load ulang lalu coba lagi."
+                .to_string(),
+        );
     }
-    
-    // Check if trailing bytes are spaces (0x20) or null bytes (0x00)
-    let mut check_idx = offset + original_len;
-    while check_idx < data.len() {
-        let b = data[check_idx];
-        if b == 0x20 {
-            pad_char = 0x20;
-            original_len += 1;
-            check_idx += 1;
-        } else if b == 0x00 {
-            original_len += 1;
-            check_idx += 1;
-        } else {
-            break;
-        }
-    }
-    
+
     let bytes = new_value.into_bytes();
 
-    // FIX BUG-3: tanpa guard ini, value lebih panjang dari field asli akan
-    // menimpa struktur BIOS tetangga (terbukti: 0xDEADBEEF ketimpa habis).
-    if bytes.len() > original_len {
+    // FIX BUG-3: value lebih panjang dari slot asli akan menimpa struktur tetangga.
+    if bytes.len() > slot_len {
         return Err(format!(
             "Value terlalu panjang: {} byte, field asli cuma muat {} byte. \
              Menulis lebih panjang akan merusak struktur BIOS setelahnya.",
             bytes.len(),
-            original_len
+            slot_len
         ));
     }
 
+    // Tulis nilai baru; sisa slot di-null-pad. Dibatasi KETAT ke slot_len,
+    // jadi mustahil menyentuh byte di luar field lama.
     for (idx, &b) in bytes.iter().enumerate() {
-        if offset + idx < data.len() {
-            data[offset + idx] = b;
-        }
+        data[offset + idx] = b;
     }
-    
-    if original_len > bytes.len() {
-        for idx in bytes.len()..original_len {
-            if offset + idx < data.len() {
-                data[offset + idx] = pad_char;
-            }
-        }
+    for idx in bytes.len()..slot_len {
+        data[offset + idx] = 0x00;
     }
-    
+
     Ok(data)
 }
 
@@ -1137,33 +1128,33 @@ mod compare_tests {
     #[test]
     fn test_overwrite_shorter_with_null_padding() {
         let data = vec![65, 66, 67, 68, 0, 17, 34]; // ABCD 
-        let r = overwrite_dmi_value(data, 0, "XY".to_string()).unwrap();
+        let r = overwrite_dmi_value(data, 0, "XY".to_string(), "ABCD".to_string()).unwrap();
         assert_eq!(r, vec![88, 89, 0, 0, 0, 17, 34]); // XY   
     }
 
     #[test]
-    fn test_overwrite_shorter_with_space_padding() {
-        let data = vec![65, 66, 67, 68, 32, 17]; // ABCD[space]
-        let r = overwrite_dmi_value(data, 0, "XYZ".to_string()).unwrap();
-        assert_eq!(r, vec![88, 89, 90, 32, 32, 17]); // XYZ[space][space]
+    fn test_overwrite_selalu_null_pad() {
+        // Kontrak baru: padding SELALU 0x00 (standar DMI string terminator),
+        // tidak lagi menebak spasi. old_value "ABCD" (4 slot), "XYZ" -> 1 null pad.
+        let data = vec![65, 66, 67, 68, 17]; // ABCD + tetangga 0x11
+        let r = overwrite_dmi_value(data, 0, "XYZ".to_string(), "ABCD".to_string()).unwrap();
+        assert_eq!(r, vec![88, 89, 90, 0, 17]); // XYZ\0 + 0x11 utuh
     }
 
     #[test]
     fn test_overwrite_pas_slot_diterima_tetangga_utuh() {
-        // Field slot = 'A','B',0x00 (3 byte). "XYZ" PAS muat -> boleh,
-        // dan byte tetangga 0x11 wajib tidak tersentuh.
+        // old_value "AB" (2 slot). "XY" PAS muat -> boleh, tetangga 0x11 tak tersentuh.
         let data = vec![65, 66, 0, 17];
-        let r = overwrite_dmi_value(data, 0, "XYZ".to_string()).unwrap();
-        assert_eq!(r, vec![88, 89, 90, 17]);
+        let r = overwrite_dmi_value(data, 0, "XY".to_string(), "AB".to_string()).unwrap();
+        assert_eq!(r, vec![88, 89, 0, 17]);
         assert_eq!(r[3], 17, "byte tetangga wajib utuh");
     }
 
     #[test]
     fn test_overwrite_lebih_panjang_dari_slot_ditolak() {
-        // REGRESI BUG-3: slot cuma 3 byte, value 5 byte -> harus DITOLAK,
-        // dulu byte tetangga 0x11 ketimpa diam-diam.
+        // REGRESI BUG-3: slot 2 byte, value 5 byte -> harus DITOLAK.
         let data = vec![65, 66, 0, 17];
-        let r = overwrite_dmi_value(data, 0, "XYZAB".to_string());
+        let r = overwrite_dmi_value(data, 0, "XYZAB".to_string(), "AB".to_string());
         assert!(r.is_err(), "value melebihi slot harus ditolak");
         assert!(r.unwrap_err().contains("terlalu panjang"));
     }
@@ -1172,17 +1163,48 @@ mod compare_tests {
     fn test_overwrite_tidak_rusak_tetangga() {
         // REGRESI BUG-3: struktur BIOS setelah field tidak boleh tersentuh.
         let data = vec![b'A', b'B', b'C', 0x00, 0xDE, 0xAD, 0xBE, 0xEF];
-        let r = overwrite_dmi_value(data, 0, "ABCDEFGH".to_string());
+        let r = overwrite_dmi_value(data, 0, "ABCDEFGH".to_string(), "ABC".to_string());
         assert!(r.is_err(), "harus ditolak, bukan menimpa 0xDEADBEEF");
     }
 
     #[test]
     fn test_overwrite_pas_panjang_field_diterima() {
-        // Panjang persis = field asli (3 char + 1 null = 4 slot) -> boleh.
-        let data = vec![b'A', b'B', b'C', 0x00, 0xDE, 0xAD];
-        let r = overwrite_dmi_value(data, 0, "XYZW".to_string()).unwrap();
-        assert_eq!(&r[0..4], b"XYZW");
-        assert_eq!(&r[4..], &[0xDE, 0xAD], "byte tetangga wajib utuh");
+        // old_value "ABC" (3 slot). "XYZ" pas -> boleh, tetangga utuh.
+        let data = vec![b'A', b'B', b'C', 0xDE, 0xAD];
+        let r = overwrite_dmi_value(data, 0, "XYZ".to_string(), "ABC".to_string()).unwrap();
+        assert_eq!(&r[0..3], b"XYZ");
+        assert_eq!(&r[3..], &[0xDE, 0xAD], "byte tetangga wajib utuh");
+    }
+
+    #[test]
+    fn test_overwrite_bug11_field_nempel_tabel_acpi() {
+        // REGRESI BUG-11: Windows Key (29 char) nempel LANGSUNG ke signature tabel
+        // ACPI berikutnya ("SSDT") tanpa null/spasi pemisah. Cara lama nge-scan
+        // printable -> "makan" SSDT -> pad menimpanya jadi 0x00 -> ACPI korup.
+        // Sekarang slot dibatasi tepat old_value.len() -> SSDT wajib utuh.
+        let mut data = vec![0x11u8; 40];
+        let old = b"VK7JG-NPHTM-C97JM-9MPGT-3V66T"; // 29 char
+        data[0..29].copy_from_slice(old);
+        data[29..33].copy_from_slice(b"SSDT"); // tabel tetangga, NEMPEL
+        let newkey = "NEWKY-NPHTM-C97JM-9MPGT-3V66T".to_string(); // 29 char, pas slot
+        let r = overwrite_dmi_value(
+            data,
+            0,
+            newkey,
+            String::from_utf8(old.to_vec()).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(&r[0..29], b"NEWKY-NPHTM-C97JM-9MPGT-3V66T", "key baru wajib tertulis");
+        assert_eq!(&r[29..33], b"SSDT", "tabel ACPI tetangga WAJIB utuh (BUG-11)");
+    }
+
+    #[test]
+    fn test_overwrite_offset_basi_ditolak() {
+        // Byte di offset TIDAK cocok dengan old_value (buffer berubah) -> tolak.
+        let data = vec![b'Z', b'Z', b'Z', 0x00];
+        let r = overwrite_dmi_value(data, 0, "XY".to_string(), "AB".to_string());
+        assert!(r.is_err(), "offset basi harus ditolak");
+        assert!(r.unwrap_err().contains("tidak cocok"));
     }
 
     #[test]

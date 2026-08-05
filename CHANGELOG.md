@@ -2,6 +2,18 @@
 
 Semua catatan perubahan penting pada proyek **BIOS Flasher** milik Megapass Sidoarjo akan dicatat di file ini secara berkala.
 
+## [2.2.3] - 2026-08-05
+### Fixed — Audit ronde 3 (bug yang lolos dari audit v2.2.2)
+- **[KRITIS] Edit DMI bisa merusak tabel BIOS tetangga (BUG-11):** `overwrite_dmi_value` menentukan panjang slot field dengan cara **nge-scan byte printable maju** dari offset. Kalau sebuah field (mis. Windows Key 29 char) menempel langsung ke signature tabel ACPI berikutnya (`SSDT`/`SSDT`/dll) **tanpa null atau spasi pemisah** — umum di dump BIOS mentah — scan "makan" byte tetangga dan menganggapnya bagian dari field. Saat padding, byte tetangga itu ketimpa `0x00` → struktur BIOS sebelahnya korup. Ini kelas bug yang sama dengan BUG-3, tapi lewat jalur yang belum ditutup (guard BUG-3 hanya membandingkan panjang value baru vs hasil scan yang sudah salah). Sekarang panjang slot diambil dari **nilai lama yang sudah tampil di UI** (`old_value.len()`), bukan hasil tebakan scan — batas field pasti akurat dan tetangga dijamin utuh. Terbukti via test regresi `test_overwrite_bug11_field_nempel_tabel_acpi`.
+- **Penulisan di offset basi ditolak (hardening):** Edit DMI kini memverifikasi byte di offset masih sama persis dengan nilai lama sebelum menulis. Kalau buffer sudah berubah sejak extraction (offset basi), tulisan ditolak dengan pesan jelas — bukan mendarat di lokasi salah dan merusak data.
+
+### Changed
+- **Unit test 16 → 18.** Ditambah `test_overwrite_bug11_field_nempel_tabel_acpi` (mengunci BUG-11: field menempel tabel ACPI, tetangga wajib utuh) dan `test_overwrite_offset_basi_ditolak` (menolak tulis di offset yang tidak lagi cocok). Signature `overwrite_dmi_value` sekarang menerima parameter `old_value`.
+- **Padding field DMI selalu `0x00`.** Dulu menebak antara spasi (`0x20`) dan null berdasarkan byte di sekitarnya. Sekarang selalu null terminator (standar string SMBIOS/DMI), lebih sederhana dan tidak bergantung pada scan.
+
+### Catatan
+Audit ronde 3 menemukan bahwa **fix BUG-3 di v2.2.1 tidak menutup seluruh jalur**. BUG-3 memasang guard "tolak kalau value baru lebih panjang dari field", tapi *panjang field* itu sendiri dihitung dengan scan yang bisa salah ketika tidak ada pemisah antar-field. Test regresi BUG-3 kebetulan selalu punya byte non-printable (`0x00`/`0xDEADBEEF`) tepat setelah field, jadi scan berhenti di tempat yang benar dan bug baru ini tidak ketahuan. Akar sebenarnya: panjang field seharusnya tidak pernah ditebak — sumber kebenarannya adalah nilai lama yang sudah diekstrak dan ditampilkan.
+
 ## [2.2.2] - 2026-08-03
 ### Fixed — Audit ronde 2 (bug yang lolos dari audit v2.2.1)
 - **[KRITIS] Offset Windows Key meleset → edit key bisa merusak MSDM (BUG-9):** Fix v2.2.1 mengganti `String::from_utf8` jadi `from_utf8_lossy` supaya key terbaca. Tapi `from_utf8_lossy` mengubah setiap byte biner (>0x7F, umum di header MSDM sebelum key) jadi karakter U+FFFD yang **3 byte** di UTF-8. Akibatnya `mat.start()` menggeser `windows_key_offset` sejauh jumlah byte biner (terbukti skew +3). Ketika operator klik Edit → Save Windows Key, aplikasi menulis key baru di offset yang meleset → MSDM table korup. Diganti helper `ascii_map_1to1` yang menjaga panjang string 1:1 dengan buffer (1 byte = 1 char), jadi offset selalu akurat. Berlaku untuk DMI Extractor dan DMI Injector.
