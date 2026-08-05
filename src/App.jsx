@@ -15,9 +15,18 @@ const MENU_ITEMS = [
   { id: 9, icon: "🔍", label: "Blank Check", direct: false },
 ];
 
-const APP_VERSION = "2.2.1";
+const APP_VERSION = "2.2.2";
 
 const INDO_CHANGELOG = [
+  {
+    version: "v2.2.2",
+    date: "2026-08-03",
+    items: [
+      "🛡️ [PENTING] Perbaikan lanjutan dari v2.2.1: posisi (offset) Windows Key sebelumnya bisa meleset beberapa byte saat data MSDM mengandung byte biner. Kalau operator meng-edit Windows Key, key baru bisa tertulis di posisi salah dan merusak data lisensi. Sekarang posisi selalu akurat.",
+      "📊 Progress bar tidak lagi salah skala setelah sebuah operasi gagal (dulu bisa 'nyangkut' di mode Instant).",
+      "🧪 Unit test 14 → 16, termasuk test khusus yang mengunci akurasi posisi Windows Key.",
+    ]
+  },
   {
     version: "v2.2.1",
     date: "2026-08-03",
@@ -624,6 +633,9 @@ ${diagnosticError.context || "No raw context"}
       appendLog(`❌ Error: ${err.message || err}`); 
       playSound('error');
     } finally { 
+      // FIX BUG-10: reset stage biar progress bar ops berikutnya tidak
+      // tetap di-scale mode Instant (erase/write/verify) setelah error.
+      instantStageRef.current = null;
       setIsProcessing(false); 
     }
   }
@@ -1601,7 +1613,7 @@ Mungkin chip terproteksi (Write Protect) atau Erase belum tuntas.`, { title: "Bl
             <h3 className="text-lg font-bold flex items-center gap-2">
               🔧 Megapass Service HP & Laptop Sidoarjo
             </h3>
-            <p className="text-xs opacity-60 mt-1">Version 2.2.1 (Tauri Professional Edition)</p>
+            <p className="text-xs opacity-60 mt-1">Version 2.2.2 (Tauri Professional Edition)</p>
             
             <div className="my-6 flex flex-col items-center justify-center py-6 border border-dashed border-base-content/20 rounded-lg bg-base-300">
               <div className="w-24 h-24 rounded-xl bg-primary/10 flex items-center justify-center border border-primary/20 text-primary font-bold text-center text-xs p-2 select-none">

@@ -63,6 +63,29 @@ fn parse_progress(line: &str) -> Option<f64> {
     caps.get(1)?.as_str().parse::<f64>().ok()
 }
 
+/// Sanitasi buffer biner → String 1 byte = 1 char.
+/// JANGAN pakai from_utf8_lossy untuk hitung offset: byte invalid jadi U+FFFD
+/// (3 byte UTF-8) → mat.start() meleset (terbukti skew +3 di audit v2.2.2).
+fn ascii_map_1to1(data: &[u8]) -> String {
+    data.iter()
+        .map(|&b| {
+            if (0x20..=0x7E).contains(&b) {
+                b as char
+            } else {
+                '.'
+            }
+        })
+        .collect()
+}
+
+fn unique_tmp(prefix: &str) -> String {
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    format!("/tmp/{}_{}_{}.bin", prefix, std::process::id(), nanos)
+}
+
 fn run_flashrom_with_progress(
     args: &[&str],
     window: &tauri::Window,
@@ -219,7 +242,7 @@ fn detect_chip() -> Result<serde_json::Value, String> {
 #[tauri::command]
 async fn read_bios(chip: String, window: tauri::Window) -> Result<Vec<u8>, String> {
     let result = std::thread::spawn(move || {
-        let output_path = format!("/tmp/bios_read_{}.bin", std::process::id());
+        let output_path = unique_tmp("bios_read");
 
         let result = run_flashrom_with_progress(
             &["-p", "ch341a_spi", "-c", &chip, "-r", &output_path],
@@ -327,9 +350,10 @@ fn inject_dmi(data_old: Vec<u8>, data_new: Vec<u8>) -> Result<Vec<u8>, Diagnosti
             let old_key_segment = &data_old[old_msdm_pos..std::cmp::min(data_old.len(), old_msdm_pos + 120)];
             let new_key_segment = &output_data[new_msdm_pos..std::cmp::min(output_data.len(), new_msdm_pos + 120)];
 
-            // FIX BUG-1: segment MSDM biner -> from_utf8 selalu Err. Pakai lossy.
-            let old_text = String::from_utf8_lossy(old_key_segment).to_string();
-            let new_text = String::from_utf8_lossy(new_key_segment).to_string();
+            // FIX BUG-9: jangan from_utf8_lossy — U+FFFD bikin mat.start() skew.
+            // ascii_map_1to1 jaga panjang 1:1 dengan buffer biner.
+            let old_text = ascii_map_1to1(old_key_segment);
+            let new_text = ascii_map_1to1(new_key_segment);
 
             let re_key = Regex::new(r"[A-Z0-9]{5}-[A-Z0-9]{5}-[A-Z0-9]{5}-[A-Z0-9]{5}-[A-Z0-9]{5}").unwrap();
             if let Some(old_mat) = re_key.find(&old_text) {
@@ -337,7 +361,6 @@ fn inject_dmi(data_old: Vec<u8>, data_new: Vec<u8>) -> Result<Vec<u8>, Diagnosti
                 if let Some(new_mat) = re_key.find(&new_text) {
                     let start_replace = new_msdm_pos + new_mat.start();
                     let end_replace = new_msdm_pos + new_mat.end();
-                    // guard: panjang key harus sama persis (29 byte) & dalam batas buffer
                     if end_replace <= output_data.len()
                         && (end_replace - start_replace) == old_key_str.len()
                     {
@@ -541,9 +564,8 @@ fn clean_me_region(data: Vec<u8>, mode: String, app_handle: tauri::AppHandle) ->
 
     if mode == "python" {
         // Run me_cleaner.py script
-        let id = std::process::id();
-        let temp_in = format!("/tmp/me_cleaner_in_{}.bin", id);
-        let temp_out = format!("/tmp/me_cleaner_out_{}.bin", id);
+        let temp_in = unique_tmp("me_cleaner_in");
+        let temp_out = unique_tmp("me_cleaner_out");
 
         if let Err(e) = fs::write(&temp_in, &data) {
             return Err(diagnose_err!(
@@ -644,14 +666,12 @@ fn extract_dmi_and_key(data: Vec<u8>) -> serde_json::Value {
         let start = pos;
         let end = std::cmp::min(data.len(), pos + 120);
         let segment = &data[start..end];
-        // FIX BUG-1: MSDM adalah ACPI table biner (checksum byte >0x7F).
-        // String::from_utf8 selalu Err -> key tidak pernah terbaca.
-        // from_utf8_lossy tetap mempertahankan posisi byte ASCII sehingga offset valid.
-        let text = String::from_utf8_lossy(segment).to_string();
+        // FIX BUG-1 + BUG-9: MSDM biner. from_utf8 gagal total; from_utf8_lossy
+        // bikin key terbaca tapi mat.start() SKEW (U+FFFD = 3 byte). Pakai map 1:1.
+        let text = ascii_map_1to1(segment);
         let re_key = Regex::new(r"[A-Z0-9]{5}-[A-Z0-9]{5}-[A-Z0-9]{5}-[A-Z0-9]{5}-[A-Z0-9]{5}").unwrap();
         if let Some(mat) = re_key.find(&text) {
             win_key = mat.as_str().to_string();
-            // pakai offset byte hasil match langsung, bukan find() ulang
             win_key_offset = pos + mat.start();
         }
     }
@@ -761,7 +781,7 @@ async fn write_bios(chip: String, data: Vec<u8>, window: tauri::Window) -> Resul
     if data.is_empty() {
         return Err("Write buffer empty - Load File or Read first".to_string());
     }
-    let buffer_path = format!("/tmp/bios_write_{}.bin", std::process::id());
+    let buffer_path = unique_tmp("bios_write");
     fs::write(&buffer_path, &data).map_err(|e| format!("Failed to write buffer: {}", e))?;
 
     let result = std::thread::spawn(move || {
@@ -791,7 +811,7 @@ async fn verify_bios(
     if data.is_empty() {
         return Err("Verify buffer empty - Load File or Read first".to_string());
     }
-    let buffer_path = format!("/tmp/bios_verify_{}.bin", std::process::id());
+    let buffer_path = unique_tmp("bios_verify");
     fs::write(&buffer_path, &data).map_err(|e| format!("Failed to write buffer: {}", e))?;
 
     let result = std::thread::spawn(move || {
@@ -981,7 +1001,7 @@ async fn blank_check_bios(chip: String, window: tauri::Window) -> Result<String,
     }
 
     let result = std::thread::spawn(move || {
-        let output_path = format!("/tmp/bios_blank_check_{}.bin", std::process::id());
+        let output_path = unique_tmp("bios_blank_check");
 
         let result = run_flashrom_with_progress(
             &["-p", "ch341a_spi", "-c", &chip, "-r", &output_path],
@@ -1213,5 +1233,42 @@ mod compare_tests {
             "VK7JG-NPHTM-C97JM-9MPGT-3V66T",
             "key wajib terbaca walau MSDM mengandung byte biner"
         );
+    }
+
+    #[test]
+    fn test_key_offset_akurat_walau_byte_biner() {
+        // REGRESI BUG-9: from_utf8_lossy bikin byte invalid jadi U+FFFD (3 byte),
+        // sehingga mat.start() SKEW +3 dari posisi byte asli. Edit key via UI lalu
+        // menulis di offset skew -> MSDM korup. ascii_map_1to1 harus akurat 1:1.
+        let mut bios = vec![0xFFu8; 8192];
+        let pos = 1000;
+        bios[pos..pos + 4].copy_from_slice(b"MSDM");
+        bios[pos + 4..pos + 8].copy_from_slice(&0x55u32.to_le_bytes());
+        // beberapa byte biner (>0x7F) SEBELUM key -> pemicu skew lossy
+        bios[pos + 9] = 0xB3;
+        bios[pos + 10] = 0xE4;
+        bios[pos + 11] = 0x91;
+        let key = b"VK7JG-NPHTM-C97JM-9MPGT-3V66T";
+        let true_off = pos + 56;
+        bios[true_off..true_off + key.len()].copy_from_slice(key);
+
+        let info = extract_dmi_and_key(bios.clone());
+        let reported = info["windows_key_offset"].as_u64().unwrap() as usize;
+        assert_eq!(
+            reported, true_off,
+            "offset harus == posisi byte asli (bukan skew lossy)"
+        );
+        // bukti kuat: byte di offset yang dilaporkan HARUS awal key sungguhan
+        assert_eq!(&bios[reported..reported + 5], b"VK7JG",
+            "offset yang dilaporkan harus menunjuk awal key sebenarnya");
+    }
+
+    #[test]
+    fn test_ascii_map_panjang_1to1() {
+        // ascii_map_1to1 wajib menjaga panjang == jumlah byte input (kunci akurasi offset)
+        let data = vec![0x41, 0xB3, 0x00, 0x7E, 0xFF, 0x20];
+        let s = ascii_map_1to1(&data);
+        assert_eq!(s.len(), data.len(), "panjang string == jumlah byte");
+        assert_eq!(s, "A..~. ");
     }
 }

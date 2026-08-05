@@ -2,6 +2,18 @@
 
 Semua catatan perubahan penting pada proyek **BIOS Flasher** milik Megapass Sidoarjo akan dicatat di file ini secara berkala.
 
+## [2.2.2] - 2026-08-03
+### Fixed — Audit ronde 2 (bug yang lolos dari audit v2.2.1)
+- **[KRITIS] Offset Windows Key meleset → edit key bisa merusak MSDM (BUG-9):** Fix v2.2.1 mengganti `String::from_utf8` jadi `from_utf8_lossy` supaya key terbaca. Tapi `from_utf8_lossy` mengubah setiap byte biner (>0x7F, umum di header MSDM sebelum key) jadi karakter U+FFFD yang **3 byte** di UTF-8. Akibatnya `mat.start()` menggeser `windows_key_offset` sejauh jumlah byte biner (terbukti skew +3). Ketika operator klik Edit → Save Windows Key, aplikasi menulis key baru di offset yang meleset → MSDM table korup. Diganti helper `ascii_map_1to1` yang menjaga panjang string 1:1 dengan buffer (1 byte = 1 char), jadi offset selalu akurat. Berlaku untuk DMI Extractor dan DMI Injector.
+- **Progress bar salah skala setelah error (BUG-10):** `instantStageRef` tidak di-reset saat operasi gagal. Kalau Instant Mode error di tengah, operasi berikutnya (Read/Write biasa) progress bar-nya masih memakai skala Instant (erase 0-33%, write 33-66%, verify 66-100%) sehingga tampil salah. Sekarang di-reset di blok `finally`.
+- **Potensi tabrakan file temp (hardening):** Nama file sementara di `/tmp` hanya pakai PID proses. Karena semua operasi jalan dalam satu proses aplikasi, dua operasi dalam sesi yang sama bisa memakai path identik. Ditambah timestamp nano-detik (`pid + nanos`) supaya unik.
+
+### Changed
+- **Unit test 14 → 16.** Ditambah `test_key_offset_akurat_walau_byte_biner` (mengunci BUG-9: offset yang dilaporkan harus menunjuk awal key sebenarnya) dan `test_ascii_map_panjang_1to1` (memastikan panjang string == jumlah byte).
+
+### Catatan
+Audit ronde 2 ini menemukan bahwa **fix BUG-1 di v2.2.1 sendiri mengandung bug baru (BUG-9)**. `from_utf8_lossy` benar membuat key *terbaca* (tujuan BUG-1 tercapai), tapi merusak *akurasi offset* — yang baru berdampak saat fitur Edit DMI dipakai. Test regresi v2.2.1 hanya mengecek key terbaca, tidak mengecek offset-nya, makanya lolos.
+
 ## [2.2.1] - 2026-08-03
 ### Fixed — Deep Audit (8 logic bug, 2 di antaranya berisiko merusak hardware)
 - **[KRITIS] DMI Injector bisa brick BIOS:** Signature pencarian `"DMI"` cuma 3 byte, jadi cocok dengan string sampah biasa di BIOS (contoh nyata: `"DMI EDIT TOOL"`). Offset hasil salah itu dipakai untuk menyalin 64KB secara buta, sehingga region acak (bisa NVRAM/ME/descriptor) ketimpa. Sekarang hanya menerima anchor yang divalidasi strukturnya: MSDM (cek length field `0x55..0x1000`), SMBIOS `_SM_` (cek length ≥ `0x18`), dan `_DMI_` 5-byte. Kalau tidak yakin → tolak, bukan hajar.
