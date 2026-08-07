@@ -104,7 +104,15 @@ Kompilasi ke aplikasi native standalone (.AppImage, .deb):
 ```bash
 npm run tauri build
 ```
-Hasil build binary dapat ditemukan di: `src-tauri/target/release/bios-flasher`.
+Hasil build dapat ditemukan di:
+- **Binary:** `src-tauri/target/release/bios-flasher`
+- **Installer .deb:** `src-tauri/target/release/bundle/deb/BIOS Flasher Professional_2.2.6_amd64.deb`
+- **AppImage:** `src-tauri/target/release/bundle/appimage/`
+
+Install .deb:
+```bash
+sudo dpkg -i "src-tauri/target/release/bundle/deb/BIOS Flasher Professional_2.2.6_amd64.deb"
+```
 
 ---
 
