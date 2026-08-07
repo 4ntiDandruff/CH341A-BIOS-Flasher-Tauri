@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { open, save, message } from "@tauri-apps/plugin-dialog";
+import { open, save, message, ask } from "@tauri-apps/plugin-dialog";
 
 const MENU_ITEMS = [
   { id: 1, icon: "🔍", label: "Detect Chip", direct: true },
@@ -459,12 +459,12 @@ export default function App() {
       const volt = chipInfo?.voltage && chipInfo.voltage !== "Unknown"
         ? chipInfo.voltage
         : "TIDAK DIKENAL (tidak ada di database chip)";
-      const ok = window.confirm(
+      const ok = await ask(
         `Voltase chip ${chip}: ${volt}\n\n` +
         `Chip ini BUKAN 3.3V yang terkonfirmasi. Kalau ternyata 1.8V dan ` +
         `dihajar 3.3V tanpa adapter level shifter, chip HANGUS.\n\n` +
         `Cek datasheet chip. Adapter 1.8V sudah terpasang / yakin aman lanjut?`
-      );
+      , { title: "⚠️ Konfirmasi Voltase", kind: "warning" });
       if (!ok) {
         appendLog(`⛔ Dibatalkan - konfirmasi voltase (${volt}) ditolak operator`);
         return false;
@@ -478,13 +478,13 @@ export default function App() {
     if (needBuffer && chipInfo?.size_kb > 0 && buffer) {
       const chipBytes = chipInfo.size_kb * 1024;
       if (buffer.length !== chipBytes) {
-        const ok = window.confirm(
+        const ok = await ask(
           `⚠️ Ukuran TIDAK cocok!\n\n` +
           `Image di buffer : ${(buffer.length / 1024 / 1024).toFixed(2)} MB\n` +
           `Chip terdeteksi : ${(chipBytes / 1024 / 1024).toFixed(2)} MB (${chip})\n\n` +
           `Kemungkinan salah chip terdeteksi atau salah file. flashrom akan menolak write, ` +
           `tapi Instant Mode sudah menghapus chip lebih dulu. Yakin lanjut?`
-        );
+        , { title: "⚠️ Konfirmasi Voltase", kind: "warning" });
         if (!ok) {
           appendLog(`⛔ Dibatalkan - ukuran image (${buffer.length}B) != chip (${chipBytes}B)`);
           return false;
@@ -1020,7 +1020,7 @@ Mungkin chip terproteksi (Write Protect) atau Erase belum tuntas.`, { title: "Bl
   async function handleWrite() {
     if (!(await runPreflight({ needBuffer: true, opLabel: "Write" }))) return;
     const sizeKb = (buffer.length / 1024).toFixed(0);
-    if (!window.confirm(`Write ${sizeKb}KB ke ${chip}?\n\nPastikan backup sudah disimpan.`)) {
+    if (!(await ask(`Write ${sizeKb}KB ke ${chip}?\n\nPastikan backup sudah disimpan.`, { title: "Konfirmasi Write", kind: "warning" }))) {
       appendLog("Write dibatalkan operator.");
       return;
     }
@@ -1062,11 +1062,12 @@ Mungkin chip terproteksi (Write Protect) atau Erase belum tuntas.`, { title: "Bl
   async function ensureBackupBeforeDestroy(opLabel) {
     if (!buffer || buffer.length === 0) return true; // gak ada yang perlu dilindungi
     if (fileName && fileName.trim() !== "") return true; // sudah ada file backup
-    const doBackup = window.confirm(
+    const doBackup = await ask(
       `⚠️ Buffer RAM belum disimpan ke file .bin!\n\n` +
       `Isi buffer ini bisa jadi SATU-SATUNYA copy BIOS customer ` +
       `(lisensi Windows/MSDM, serial). ${opLabel} akan menimpanya permanen.\n\n` +
-      `Klik OK untuk Simpan Backup dulu (disarankan), atau Cancel untuk tetap lanjut TANPA backup.`
+      `Klik OK untuk Simpan Backup dulu (disarankan), atau Cancel untuk tetap lanjut TANPA backup.`,
+      { title: "⚠️ Backup Dulu?", kind: "warning" }
     );
     if (doBackup) {
       // Cek nilai kembalian, BUKAN state fileName (state React async - masih lama di sini).
@@ -1078,14 +1079,14 @@ Mungkin chip terproteksi (Write Protect) atau Erase belum tuntas.`, { title: "Bl
       return true;
     }
     // Operator sadar memilih lanjut tanpa backup.
-    return window.confirm(`🚨 Yakin ${opLabel} TANPA backup? Data buffer akan HILANG permanen.`);
+    return await ask(`🚨 Yakin ${opLabel} TANPA backup? Data buffer akan HILANG permanen.`, { title: "🚨 Tanpa Backup", kind: "warning" });
   }
 
   async function handleErase() {
     if (!(await runPreflight({ needBuffer: false, opLabel: "Erase" }))) return;
     if (!(await ensureBackupBeforeDestroy("Erase"))) return;
-    if (!window.confirm(`⚠️ ERASE chip ${chip}?\nThis will permanently destroy all data!`)) return;
-    if (!window.confirm(`🚨 FINAL WARNING!\nAre you ABSOLUTELY SURE you want to erase ${chip}?`)) return;
+    if (!(await ask(`⚠️ ERASE chip ${chip}?\nThis will permanently destroy all data!`, { title: "⚠️ Konfirmasi Erase", kind: "warning" }))) return;
+    if (!(await ask(`🚨 FINAL WARNING!\nAre you ABSOLUTELY SURE you want to erase ${chip}?`, { title: "🚨 Final Warning", kind: "warning" }))) return;
     appendLog(`🗑️ Erasing ${chip}...`);
     const start = performance.now();
     await invoke("erase_bios", { chip });
@@ -1101,7 +1102,7 @@ Mungkin chip terproteksi (Write Protect) atau Erase belum tuntas.`, { title: "Bl
     if (!(await runPreflight({ needBuffer: true, opLabel: "Instant Mode" }))) return;
     if (!(await ensureBackupBeforeDestroy("Instant Mode"))) return;
     const sizeKb = (buffer.length / 1024).toFixed(0);
-    if (!window.confirm(`Instant Mode\nErase -> Write -> Verify\n\nTarget: ${chip}\nData: ${sizeKb}KB\n\nLanjut?`)) {
+    if (!(await ask(`Instant Mode\nErase -> Write -> Verify\n\nTarget: ${chip}\nData: ${sizeKb}KB\n\nLanjut?`, { title: "⚡ Instant Mode", kind: "warning" }))) {
       appendLog("Instant Mode dibatalkan operator.");
       return;
     }

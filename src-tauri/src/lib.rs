@@ -234,7 +234,9 @@ fn detect_chip() -> Result<serde_json::Value, String> {
     let stderr = String::from_utf8_lossy(&output.stderr).to_string();
     let combined = format!("{}\n{}", stdout, stderr);
 
-    let re_found = Regex::new(r#"Found\s+.*?chip\s+"([^"]+)""#).unwrap();
+    // M2 hardening: tambah fallback regex untuk format flashrom yang berbeda
+    // (mis. "Detected ..." atau "Identified ..."). Regex utama tetap dipertahankan.
+    let re_found = Regex::new(r#"(?:Found|Detected|Identified)\s+.*?chip\s+"([^"]+)""#).unwrap();
     let re_multiple = Regex::new(r#"Multiple flash chip definitions match.*:\s*"([^"]+)""#).unwrap();
 
     let mut chips: Vec<String> = Vec::new();
@@ -564,7 +566,7 @@ fn compare_bios_diff(data_a: Vec<u8>, data_b: Vec<u8>) -> Result<CompareResult, 
 fn analyze_me_region(data: Vec<u8>) -> serde_json::Value {
     let mut found = false;
     let mut offset_hex = "Not Found".to_string();
-    let mut size_kb = 0;
+    let mut size_kb: usize = 0;
     let mut version = "Unknown".to_string();
     let mut status = "Unknown".to_string();
 
@@ -588,9 +590,43 @@ fn analyze_me_region(data: Vec<u8>) -> serde_json::Value {
             version = "Intel ME (Generic)".to_string();
         }
 
-        // Determine rough size based on Intel Descriptor specs (standard ME size is 1.5MB to 5MB)
-        size_kb = 2048; // Default estimate 2MB
-        status = "Initialized (Dirty)".to_string();
+        // M3: Parse ME region size dari Intel Flash Descriptor (IFD).
+        // IFD signature FLVALSIG (0x0FF0A55A) di offset 0x10 dari awal flash.
+        // FREG2 (ME region) ada di offset 0x48-0x4B: bits [14:0] = base (4KB units),
+        // bits [30:16] = limit (4KB units). Kalau IFD tidak ada, fallback 2MB.
+        let mut me_size_parsed = false;
+        if data.len() >= 0x4C {
+            let flvalsig = u32::from_le_bytes([data[0x10], data[0x11], data[0x12], data[0x13]]);
+            if flvalsig == 0x0FF0_A55A {
+                let freg2 = u32::from_le_bytes([data[0x48], data[0x49], data[0x4A], data[0x4B]]);
+                let base = (freg2 & 0x7FFF) as usize * 0x1000;
+                let limit = ((freg2 >> 16) & 0x7FFF) as usize * 0x1000 + 0xFFF;
+                if limit > base && limit < data.len() {
+                    size_kb = (limit - base + 1) / 1024;
+                    me_size_parsed = true;
+                }
+            }
+        }
+        if !me_size_parsed {
+            size_kb = 2048; // fallback 2MB kalau IFD tidak ditemukan
+        }
+
+        // M3: Cek status ME via byte di $FPT+0x14 (partition count/validity).
+        // Logika sederhana: kalau $FPT punya entry valid → Initialized.
+        // Kalau entry 0 atau $FPT terlalu pendek → kemungkinan sudah di-clean.
+        if pos + 0x20 <= data.len() {
+            let num_entries = u32::from_le_bytes([
+                data[pos + 0x14], data[pos + 0x15],
+                data[pos + 0x16], data[pos + 0x17],
+            ]);
+            if num_entries == 0 || num_entries > 128 {
+                status = "Clean / Unconfigured".to_string();
+            } else {
+                status = "Initialized (Dirty)".to_string();
+            }
+        } else {
+            status = "Unknown (header terlalu pendek)".to_string();
+        }
     }
 
     serde_json::json!({
