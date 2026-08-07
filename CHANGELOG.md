@@ -2,6 +2,18 @@
 
 Semua catatan perubahan penting pada proyek **BIOS Flasher** milik Megapass Sidoarjo akan dicatat di file ini secara berkala.
 
+## [2.2.7] - 2026-08-07
+### Fixed — Audit ronde 7 (3 temuan MEDIUM dari audit independen Opus)
+- **[M1] Dialog konfirmasi pakai `window.confirm()` (browser API):** Semua 8 dialog konfirmasi kritis (voltase 1.8V, Write, Erase, double-confirm Erase, Instant Mode, backup warning, size mismatch) diganti dari `window.confirm()` ke `await ask()` dari `@tauri-apps/plugin-dialog`. Dialog native OS — behavior konsisten di semua webview, tidak bisa ditutup tanpa jawaban eksplisit (Yes/No).
+- **[M2] Regex `detect_chip` hanya menangkap keyword `Found`:** flashrom bisa berubah format output antar versi. Regex diperlebar ke `Found|Detected|Identified` — lebih tahan perubahan format flashrom di masa depan.
+- **[M3] `analyze_me_region` hardcode size 2MB dan status `Initialized (Dirty)`:** ME region size sekarang di-parse dari Intel Flash Descriptor (IFD signature `0x0FF0A55A`, FREG2 register) untuk ukuran akurat. Status ME dibaca dari jumlah entry di header `$FPT` — bukan selalu "Dirty". Fallback 2MB tetap ada kalau IFD tidak ditemukan.
+
+### Changed
+- **Versi 2.2.6 → 2.2.7.** Version sync: `package.json`, `Cargo.toml`, `tauri.conf.json`, `App.jsx` (APP_VERSION + About modal), `README.md`.
+
+### Verifikasi
+`cargo test` 22/22 pass · `cargo clippy` zero warnings · `vite build` OK · `tauri build` 3 bundle OK (.deb + .rpm + .AppImage).
+
 ## [2.2.6] - 2026-08-05
 ### Fixed — Audit ronde 6 (sisa temuan hardening + 1 BRICK laten)
 - **[LOW / KEBOCORAN DATA] Temp BIOS di `/tmp` 0644 + orphan saat crash:** `read_bios`, `write_bios`, `verify_bios`, `blank_check_bios`, dan `clean_me_region` (mode python) menulis dump BIOS mentah ke `/tmp` lewat `fs::write`/flashrom `-r` dengan mode default umask (**0644, world-readable**), lalu menghapusnya manual di tiap jalur `match`. Dua masalah: (1) selama operasi, dump BIOS customer (lisensi Windows/MSDM, serial) bisa dibaca user lain di PC yang sama; (2) kalau flashrom/thread **panic** di tengah, `remove_file` manual dilewati → file BIOS parsial nyangkut permanen di `/tmp`. Diperbaiki dengan guard RAII `TempFile`: file lahir **mode 0600** (`OpenOptions().mode(0o600)`) dan dihapus otomatis lewat `Drop` di **semua** jalur keluar termasuk panic. Semua `remove_file` manual yang tersebar dibuang (drop yang urus).

@@ -1,4 +1,4 @@
-# ⚡ BIOS Flasher Professional Edition v2.2.6
+# ⚡ BIOS Flasher Professional Edition v2.2.7
 ### 🔧 *The Ultimate SPI Flasher Tool for Megapass Sidoarjo*
 
 [![Tauri](https://img.shields.io/badge/Framework-Tauri%20v2-blue?logo=tauri)](https://tauri.app/)
@@ -106,12 +106,12 @@ npm run tauri build
 ```
 Hasil build dapat ditemukan di:
 - **Binary:** `src-tauri/target/release/bios-flasher`
-- **Installer .deb:** `src-tauri/target/release/bundle/deb/BIOS Flasher Professional_2.2.6_amd64.deb`
+- **Installer .deb:** `src-tauri/target/release/bundle/deb/BIOS Flasher Professional_2.2.7_amd64.deb`
 - **AppImage:** `src-tauri/target/release/bundle/appimage/`
 
 Install .deb:
 ```bash
-sudo dpkg -i "src-tauri/target/release/bundle/deb/BIOS Flasher Professional_2.2.6_amd64.deb"
+sudo dpkg -i "src-tauri/target/release/bundle/deb/BIOS Flasher Professional_2.2.7_amd64.deb"
 ```
 
 ---
@@ -120,7 +120,7 @@ sudo dpkg -i "src-tauri/target/release/bundle/deb/BIOS Flasher Professional_2.2.
 ---
 
 ## 📜 Riwayat Versi
-Semua perubahan tercatat di [`CHANGELOG.md`](CHANGELOG.md). Rilis stabil terkini: **v2.2.6** (hardening keamanan: temp file `/tmp` mode 0600 + auto-cleanup anti-panic, validasi anchor `_DMI_`).
+Semua perubahan tercatat di [`CHANGELOG.md`](CHANGELOG.md). Rilis stabil terkini: **v2.2.7** (hardening keamanan: temp file `/tmp` mode 0600 + auto-cleanup anti-panic, validasi anchor `_DMI_`).
 
 ## 📋 SOP Meja Servis
 

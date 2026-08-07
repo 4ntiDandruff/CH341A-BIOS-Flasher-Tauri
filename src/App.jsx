@@ -15,9 +15,18 @@ const MENU_ITEMS = [
   { id: 9, icon: "🔍", label: "Blank Check", direct: false },
 ];
 
-const APP_VERSION = "2.2.6";
+const APP_VERSION = "2.2.7";
 
 const INDO_CHANGELOG = [
+  {
+    version: "v2.2.7",
+    date: "2026-08-07",
+    items: [
+      "🔧 Dialog konfirmasi (voltase 1.8V, Write, Erase, Instant Mode, backup) diganti dari window.confirm() ke dialog native OS (@tauri-apps/plugin-dialog) — behavior konsisten, tidak bisa tertutup tanpa jawaban eksplisit.",
+      "🔍 Regex deteksi chip diperlebar: selain 'Found', sekarang juga menangkap 'Detected' dan 'Identified' dari output flashrom — tahan perubahan format antar versi flashrom.",
+      "📊 ME Region size sekarang di-parse dari Intel Flash Descriptor (IFD FREG2), bukan hardcode 2MB. Status ME dibaca dari jumlah entry $FPT, bukan selalu 'Dirty'.",
+    ]
+  },
   {
     version: "v2.2.6",
     date: "2026-08-05",
@@ -1710,7 +1719,7 @@ Mungkin chip terproteksi (Write Protect) atau Erase belum tuntas.`, { title: "Bl
             <h3 className="text-lg font-bold flex items-center gap-2">
               🔧 Megapass Service HP & Laptop Sidoarjo
             </h3>
-            <p className="text-xs opacity-60 mt-1">Version 2.2.6 (Tauri Professional Edition)</p>
+            <p className="text-xs opacity-60 mt-1">Version 2.2.7 (Tauri Professional Edition)</p>
             
             <div className="my-6 flex flex-col items-center justify-center py-6 border border-dashed border-base-content/20 rounded-lg bg-base-300">
               <div className="w-24 h-24 rounded-xl bg-primary/10 flex items-center justify-center border border-primary/20 text-primary font-bold text-center text-xs p-2 select-none">
